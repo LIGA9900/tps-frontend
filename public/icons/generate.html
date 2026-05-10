@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+
+<body>
+    <canvas id="c192" width="192" height="192"></canvas>
+    <canvas id="c512" width="512" height="512"></canvas>
+    <canvas id="c180" width="180" height="180"></canvas>
+    <script>
+        function drawIcon(canvasId, size) {
+            const canvas = document.getElementById(canvasId);
+            const ctx = canvas.getContext('2d');
+
+            // Fond dégradé
+            const grad = ctx.createLinearGradient(0, 0, size, size);
+            grad.addColorStop(0, '#0a0e1a');
+            grad.addColorStop(1, '#111827');
+            ctx.fillStyle = grad;
+            ctx.roundRect(0, 0, size, size, size * 0.2);
+            ctx.fill();
+
+            // Cercle vert
+            ctx.beginPath();
+            ctx.arc(size / 2, size / 2, size * 0.35, 0, Math.PI * 2);
+            ctx.strokeStyle = '#00d4aa';
+            ctx.lineWidth = size * 0.05;
+            ctx.stroke();
+
+            // Texte TPS
+            ctx.fillStyle = '#00d4aa';
+            ctx.font = `bold ${size * 0.25}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('TPS', size / 2, size / 2);
+
+            // Télécharger
+            const link = document.createElement('a');
+            link.download = `icon-${size}.png`;
+            link.href = canvas.toDataURL();
+            link.click();
+        }
+
+        drawIcon('c192', 192);
+        setTimeout(() => drawIcon('c512', 512), 500);
+        setTimeout(() => drawIcon('c180', 180), 1000);
+    </script>
+</body>
+
+</html>
