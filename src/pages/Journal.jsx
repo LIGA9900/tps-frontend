@@ -1,0 +1,397 @@
+import { useEffect, useState } from 'react';
+import api from '../services/api';
+import { useAuth } from '../context/AuthContext';
+import { useData } from '../context/DataContext';
+import { useToast } from '../components/Toast';
+import { Plus, Trash2, X, Check, Edit3, Save } from 'lucide-react';
+
+const ASSETS = ['XAUUSD','EURUSD','GBPUSD','USDJPY','BTCUSD','NAS100','US30','GBPJPY','XAGUSD','ETHUSD'];
+const SETUPS = ['Breakout','Pullback','Reversal','Continuation','Support/Resistance','EMA Bounce','ICT','SMC','Fibonacci','Order Block'];
+
+const emptyForm = {
+  date: new Date().toISOString().split('T')[0],
+  asset: 'XAUUSD', type: 'BUY', setup: '',
+  confluences: '', entry: '', sl: '', tp: '',
+  lot: '', risk_percent: '', risk_dollar: '',
+  result: 'WIN', profit: '', comment: '',
+};
+
+export default function Journal() {
+  const [trades, setTrades]       = useState([]);
+  const [showForm, setShowForm]   = useState(false);
+  const [form, setForm]           = useState(emptyForm);
+  const [editingId, setEditingId] = useState(null); // ← ID du trade en édition
+  const [loading, setLoading]     = useState(false);
+  const [calc, setCalc]           = useState(null);
+
+  // Filtres
+  const [filterAsset,  setFilterAsset]  = useState('all');
+  const [filterResult, setFilterResult] = useState('all');
+
+  const { refreshUser }          = useAuth();
+  const { refresh }              = useData();
+  const { show, ToastComponent } = useToast();
+
+  useEffect(() => { fetchTrades(); }, []);
+
+  const fetchTrades = async () => {
+    const res = await api.get('/trades');
+    setTrades(res.data);
+  };
+
+  const handleChange = (e) => {
+    const updated = { ...form, [e.target.name]: e.target.value };
+    setForm(updated);
+    if (['entry', 'sl', 'risk_percent', 'asset'].includes(e.target.name)) {
+      autoCalculate(updated);
+    }
+  };
+
+  const autoCalculate = async (f) => {
+    if (f.entry && f.sl && f.risk_percent) {
+      try {
+        const res = await api.post('/calculate-lot', {
+          capital:      parseFloat(localStorage.getItem('tps_capital') || 20),
+          risk_percent: parseFloat(f.risk_percent),
+          entry:        parseFloat(f.entry),
+          sl:           parseFloat(f.sl),
+          asset:        f.asset,
+        });
+        setCalc(res.data);
+        setForm(prev => ({
+          ...prev,
+          lot:         res.data.lot,
+          risk_dollar: res.data.risk_dollar,
+        }));
+      } catch {}
+    }
+  };
+
+  // ✅ ENREGISTRER un nouveau trade
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      if (editingId) {
+        // MODE ÉDITION
+        await api.put(`/trades/${editingId}`, form);
+        show('Trade modifié avec succès ! ✏️', 'success');
+      } else {
+        // MODE CRÉATION
+        await api.post('/trades', form);
+        show('Trade enregistré avec succès ! 🎯', 'success');
+      }
+      setShowForm(false);
+      setForm(emptyForm);
+      setEditingId(null);
+      setCalc(null);
+      await fetchTrades();
+      await refresh();
+      await refreshUser(); // ← Met à jour le capital dans la sidebar
+    } catch (err) {
+      show('Erreur lors de l\'enregistrement', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ✅ OUVRIR le formulaire en mode édition
+  const handleEdit = (trade) => {
+    setForm({
+      date:         trade.date,
+      asset:        trade.asset,
+      type:         trade.type,
+      setup:        trade.setup        || '',
+      confluences:  trade.confluences  || '',
+      entry:        trade.entry,
+      sl:           trade.sl,
+      tp:           trade.tp,
+      lot:          trade.lot,
+      risk_percent: trade.risk_percent,
+      risk_dollar:  trade.risk_dollar,
+      result:       trade.result       || 'WIN',
+      profit:       trade.profit,
+      comment:      trade.comment      || '',
+    });
+    setEditingId(trade.id);
+    setShowForm(true);
+    // Scroll vers le formulaire
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // ✅ ANNULER l'édition
+  const handleCancel = () => {
+    setShowForm(false);
+    setForm(emptyForm);
+    setEditingId(null);
+    setCalc(null);
+  };
+
+  // ✅ SUPPRIMER un trade
+  const deleteTrade = async (id) => {
+    if (!confirm('Supprimer ce trade ?')) return;
+    await api.delete(`/trades/${id}`);
+    await fetchTrades();
+    await refresh();
+    await refreshUser();
+    show('Trade supprimé', 'warning');
+  };
+
+  // ✅ EXPORT CSV
+  const exportCSV = () => {
+    const headers = ['Date','Actif','Type','Setup','Entrée','SL','TP','Lot','Risque%','Risque$','Résultat','Profit','Commentaire'];
+    const rows = trades.map(t => [
+      t.date, t.asset, t.type, t.setup || '',
+      t.entry, t.sl, t.tp, t.lot,
+      t.risk_percent, t.risk_dollar,
+      t.result, t.profit, t.comment || ''
+    ]);
+    const csv  = [headers, ...rows].map(r => r.join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = `tps-trades-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    show('Export CSV téléchargé ! 📊', 'success');
+  };
+
+  // Trades filtrés
+  const filteredTrades = trades.filter(t => {
+    const assetOk  = filterAsset  === 'all' || t.asset  === filterAsset;
+    const resultOk = filterResult === 'all' || t.result === filterResult;
+    return assetOk && resultOk;
+  });
+
+  // Liste des actifs uniques pour le filtre
+  const uniqueAssets = [...new Set(trades.map(t => t.asset))];
+
+  return (
+    <div style={s.page}>
+
+      {/* Header */}
+      <div style={s.header}>
+        <div>
+          <h1 style={s.title}>📒 Journal de Trading</h1>
+          <p style={s.subtitle}>{trades.length} trades enregistrés</p>
+        </div>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button onClick={exportCSV} style={s.exportBtn}>
+            📥 Export CSV
+          </button>
+          <button onClick={() => showForm ? handleCancel() : setShowForm(true)} style={s.addBtn}>
+            {showForm ? <X size={16}/> : <Plus size={16}/>}
+            {showForm ? 'Annuler' : 'Nouveau Trade'}
+          </button>
+        </div>
+      </div>
+
+      {/* Formulaire ajout / édition */}
+      {showForm && (
+        <div style={s.formCard}>
+          <h3 style={s.formTitle}>
+            {editingId ? '✏️ Modifier le trade' : '➕ Enregistrer un nouveau trade'}
+          </h3>
+          <form onSubmit={handleSubmit}>
+            <div style={s.grid3}>
+              <Field label="Date"  name="date"  type="date"   value={form.date}  onChange={handleChange}/>
+              <SelectField label="Actif" name="asset" value={form.asset} onChange={handleChange} options={ASSETS}/>
+              <SelectField label="Type"  name="type"  value={form.type}  onChange={handleChange} options={['BUY','SELL']}/>
+            </div>
+            <div style={s.grid3}>
+              <Field label="Entrée"      name="entry" type="number" step="0.00001" value={form.entry} onChange={handleChange} placeholder="4547.00"/>
+              <Field label="Stop Loss"   name="sl"    type="number" step="0.00001" value={form.sl}    onChange={handleChange} placeholder="4540.00"/>
+              <Field label="Take Profit" name="tp"    type="number" step="0.00001" value={form.tp}    onChange={handleChange} placeholder="4561.00"/>
+            </div>
+            <div style={s.grid3}>
+              <Field label="Risque %"   name="risk_percent" type="number" step="0.1"  value={form.risk_percent} onChange={handleChange} placeholder="50"/>
+              <Field label="Lot (auto)" name="lot"          type="number" step="0.01" value={form.lot}          onChange={handleChange} placeholder="0.01"/>
+              <Field label="Risque $"   name="risk_dollar"  type="number" step="0.01" value={form.risk_dollar}  onChange={handleChange} placeholder="0.00"/>
+            </div>
+
+            {/* Résultat calcul auto */}
+            {calc && (
+              <div style={s.calcResult}>
+                <Check size={14} color="#00d4aa"/>
+                <span>Lot : <strong style={{color:'#00d4aa'}}>{calc.lot}</strong></span>
+                <span>Risque : <strong style={{color:'#f59e0b'}}>{calc.risk_dollar}$</strong></span>
+                <span>Distance SL : <strong style={{color:'#fff'}}>{calc.sl_distance} pts</strong></span>
+                <span style={{color:'#6b7280',fontSize:'11px'}}>{calc.formula}</span>
+              </div>
+            )}
+
+            <div style={s.grid2}>
+              <SelectField label="Setup"    name="setup"  value={form.setup}  onChange={handleChange} options={['', ...SETUPS]}/>
+              <SelectField label="Résultat" name="result" value={form.result} onChange={handleChange} options={['WIN','LOSS','BREAKEVEN']}/>
+            </div>
+            <div style={s.grid2}>
+              <Field label="Profit/Perte ($)" name="profit"      type="number" step="0.01" value={form.profit}      onChange={handleChange} placeholder="7.54"/>
+              <Field label="Confluences"      name="confluences"                            value={form.confluences} onChange={handleChange} placeholder="Support H4, EMA 200, Fibo 0.618..."/>
+            </div>
+            <div style={{ marginTop: '12px' }}>
+              <label style={s.label}>Commentaire</label>
+              <textarea name="comment" value={form.comment} onChange={handleChange}
+                placeholder="Notes sur ce trade..." style={s.textarea} rows={2}/>
+            </div>
+
+            <div style={{ display:'flex', gap:'10px', marginTop:'16px' }}>
+              <button type="submit" style={s.submitBtn} disabled={loading}>
+                {loading ? 'Enregistrement...' : editingId ? '💾 Sauvegarder les modifications' : '✅ Enregistrer le Trade'}
+              </button>
+              {editingId && (
+                <button type="button" onClick={handleCancel} style={s.cancelBtn}>
+                  Annuler
+                </button>
+              )}
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Filtres */}
+      <div style={s.filtersBar}>
+        <div style={s.filterGroup}>
+          <label style={s.filterLabel}>Actif :</label>
+          <select value={filterAsset} onChange={e => setFilterAsset(e.target.value)} style={s.filterSelect}>
+            <option value="all">Tous</option>
+            {uniqueAssets.map(a => <option key={a} value={a}>{a}</option>)}
+          </select>
+        </div>
+        <div style={s.filterGroup}>
+          <label style={s.filterLabel}>Résultat :</label>
+          <select value={filterResult} onChange={e => setFilterResult(e.target.value)} style={s.filterSelect}>
+            <option value="all">Tous</option>
+            <option value="WIN">WIN</option>
+            <option value="LOSS">LOSS</option>
+            <option value="BREAKEVEN">BREAKEVEN</option>
+          </select>
+        </div>
+        <div style={s.filterInfo}>
+          {filteredTrades.length} / {trades.length} trades affichés
+        </div>
+      </div>
+
+      {/* Tableau des trades */}
+      <div style={s.tableCard}>
+        {filteredTrades.length === 0 ? (
+          <p style={s.empty}>
+            {trades.length === 0
+              ? 'Aucun trade. Cliquez sur "Nouveau Trade" pour commencer !'
+              : 'Aucun trade ne correspond aux filtres sélectionnés.'}
+          </p>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={s.table}>
+              <thead>
+                <tr>
+                  {['Date','Actif','Type','Setup','Entrée','SL','TP','Lot','Risque%','Résultat','Profit','Actions'].map(h => (
+                    <th key={h} style={s.th}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filteredTrades.map(trade => (
+                  <tr key={trade.id} style={{
+                    ...s.tr,
+                    background: editingId === trade.id ? '#00d4aa08' : 'transparent',
+                    borderLeft: editingId === trade.id ? '2px solid #00d4aa' : '2px solid transparent',
+                  }}>
+                    <td style={s.td}>{trade.date}</td>
+                    <td style={s.td}><strong style={{color:'#00a8ff'}}>{trade.asset}</strong></td>
+                    <td style={s.td}>
+                      <span style={{color: trade.type==='BUY' ? '#00d4aa':'#ef4444', fontWeight:'600'}}>{trade.type}</span>
+                    </td>
+                    <td style={s.td}>{trade.setup || '-'}</td>
+                    <td style={s.td}>{trade.entry}</td>
+                    <td style={s.td}>{trade.sl}</td>
+                    <td style={s.td}>{trade.tp}</td>
+                    <td style={s.td}>{trade.lot}</td>
+                    <td style={s.td}>{trade.risk_percent}%</td>
+                    <td style={s.td}>
+                      <span style={{
+                        background: trade.result==='WIN' ? '#00d4aa22' : trade.result==='LOSS' ? '#ef444422' : '#f59e0b22',
+                        color:      trade.result==='WIN' ? '#00d4aa'   : trade.result==='LOSS' ? '#ef4444'   : '#f59e0b',
+                        padding: '2px 8px', borderRadius: '20px', fontSize: '11px', fontWeight: '600'
+                      }}>{trade.result}</span>
+                    </td>
+                    <td style={{...s.td, color: trade.profit>=0 ? '#00d4aa':'#ef4444', fontWeight:'600'}}>
+                      {trade.profit>=0?'+':''}{trade.profit}$
+                    </td>
+                    <td style={s.td}>
+                      <div style={{ display:'flex', gap:'4px' }}>
+                        {/* Bouton Éditer */}
+                        <button onClick={() => handleEdit(trade)} style={s.editBtn} title="Modifier">
+                          <Edit3 size={13}/>
+                        </button>
+                        {/* Bouton Supprimer */}
+                        <button onClick={() => deleteTrade(trade.id)} style={s.deleteBtn} title="Supprimer">
+                          <Trash2 size={13}/>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {ToastComponent}
+    </div>
+  );
+}
+
+// Composants helper
+function Field({ label, ...props }) {
+  return (
+    <div>
+      <label style={s.label}>{label}</label>
+      <input {...props} style={s.input}/>
+    </div>
+  );
+}
+
+function SelectField({ label, options, ...props }) {
+  return (
+    <div>
+      <label style={s.label}>{label}</label>
+      <select {...props} style={s.input}>
+        {options.map(o => <option key={o} value={o}>{o}</option>)}
+      </select>
+    </div>
+  );
+}
+
+const s = {
+  page:        { maxWidth: '1200px', margin: '0 auto' },
+  header:      { display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'24px' },
+  title:       { color:'#fff', fontSize:'22px', fontWeight:'700', margin:0 },
+  subtitle:    { color:'#6b7280', fontSize:'13px', marginTop:'4px' },
+  exportBtn:   { display:'flex', alignItems:'center', gap:'8px', background:'#1f2937', border:'1px solid #374151', color:'#9ca3af', fontWeight:'600', borderRadius:'10px', padding:'10px 16px', cursor:'pointer', fontSize:'13px' },
+  addBtn:      { display:'flex', alignItems:'center', gap:'8px', background:'linear-gradient(135deg,#00d4aa,#00a8ff)', color:'#000', fontWeight:'700', border:'none', borderRadius:'10px', padding:'10px 18px', cursor:'pointer', fontSize:'13px' },
+  formCard:    { background:'#111827', border:'1px solid #1f2937', borderRadius:'12px', padding:'24px', marginBottom:'20px' },
+  formTitle:   { color:'#fff', fontSize:'15px', fontWeight:'600', margin:'0 0 20px' },
+  grid3:       { display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'12px', marginBottom:'12px' },
+  grid2:       { display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px', marginBottom:'12px' },
+  label:       { display:'block', color:'#9ca3af', fontSize:'12px', fontWeight:'500', marginBottom:'5px' },
+  input:       { width:'100%', background:'#1f2937', border:'1px solid #374151', borderRadius:'8px', padding:'9px 12px', color:'#fff', fontSize:'13px', outline:'none', boxSizing:'border-box' },
+  textarea:    { width:'100%', background:'#1f2937', border:'1px solid #374151', borderRadius:'8px', padding:'9px 12px', color:'#fff', fontSize:'13px', outline:'none', boxSizing:'border-box', resize:'vertical' },
+  calcResult:  { display:'flex', alignItems:'center', gap:'16px', background:'#00d4aa11', border:'1px solid #00d4aa33', borderRadius:'8px', padding:'10px 14px', marginBottom:'12px', fontSize:'13px', color:'#9ca3af', flexWrap:'wrap' },
+  submitBtn:   { flex:1, background:'linear-gradient(135deg,#00d4aa,#00a8ff)', color:'#000', fontWeight:'700', border:'none', borderRadius:'10px', padding:'12px 24px', cursor:'pointer', fontSize:'14px' },
+  cancelBtn:   { background:'#1f2937', border:'1px solid #374151', color:'#9ca3af', fontWeight:'600', borderRadius:'10px', padding:'12px 20px', cursor:'pointer', fontSize:'14px' },
+  filtersBar:  { display:'flex', alignItems:'center', gap:'16px', background:'#111827', border:'1px solid #1f2937', borderRadius:'10px', padding:'12px 16px', marginBottom:'16px', flexWrap:'wrap' },
+  filterGroup: { display:'flex', alignItems:'center', gap:'8px' },
+  filterLabel: { color:'#9ca3af', fontSize:'12px', fontWeight:'500', whiteSpace:'nowrap' },
+  filterSelect:{ background:'#1f2937', border:'1px solid #374151', borderRadius:'6px', padding:'5px 10px', color:'#fff', fontSize:'12px', outline:'none', cursor:'pointer' },
+  filterInfo:  { marginLeft:'auto', color:'#6b7280', fontSize:'12px' },
+  tableCard:   { background:'#111827', border:'1px solid #1f2937', borderRadius:'12px', padding:'20px' },
+  empty:       { color:'#6b7280', textAlign:'center', padding:'40px', fontSize:'14px' },
+  table:       { width:'100%', borderCollapse:'collapse', minWidth:'900px' },
+  th:          { color:'#6b7280', fontSize:'11px', fontWeight:'600', padding:'8px 10px', textAlign:'left', borderBottom:'1px solid #1f2937', whiteSpace:'nowrap' },
+  tr:          { borderBottom:'1px solid #0f172a', transition:'background 0.15s' },
+  td:          { color:'#d1d5db', fontSize:'12px', padding:'10px 10px', whiteSpace:'nowrap' },
+  editBtn:     { background:'#00a8ff22', border:'none', color:'#00a8ff', borderRadius:'6px', padding:'5px 7px', cursor:'pointer' },
+  deleteBtn:   { background:'#ef444422', border:'none', color:'#ef4444', borderRadius:'6px', padding:'5px 7px', cursor:'pointer' },
+};
