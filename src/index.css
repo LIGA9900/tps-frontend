@@ -11,7 +11,7 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-input:focus {
+input:focus, select:focus, textarea:focus {
   border-color: #00d4aa !important;
   box-shadow: 0 0 0 3px rgba(0, 212, 170, 0.15);
 }
@@ -19,3 +19,64 @@ input:focus {
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: #111827; }
 ::-webkit-scrollbar-thumb { background: #374151; border-radius: 3px; }
+
+/* ===== RESPONSIVE ===== */
+
+/* Desktop : sidebar visible, mobile header caché */
+@media (min-width: 768px) {
+  .mobile-only { display: none !important; }
+}
+
+/* Mobile : sidebar desktop cachée, header visible */
+@media (max-width: 767px) {
+  .desktop-only { display: none !important; }
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  background: #0a0e1a;
+  color: #ffffff;
+  -webkit-font-smoothing: antialiased;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: #00d4aa !important;
+  box-shadow: 0 0 0 3px rgba(0, 212, 170, 0.15);
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #111827;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #374151;
+  border-radius: 3px;
+}
+
+/* ===== RESPONSIVE ===== */
+
+/* Desktop : sidebar visible, mobile header caché */
+@media (min-width: 768px) {
+  .mobile-only {
+    display: none !important;
+  }
+}
+
+/* Mobile : sidebar desktop cachée, header visible */
+@media (max-width: 767px) {
+  .desktop-only {
+    display: none !important;
+  }
+}

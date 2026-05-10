@@ -282,24 +282,51 @@ export default function Stats() {
 const s = {
   page:       { maxWidth: '1100px', margin: '0 auto' },
   loading:    { color: '#00d4aa', textAlign: 'center', paddingTop: '100px', fontSize: '16px' },
-  header:     { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' },
+header: {
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'flex-start',
+  marginBottom: '16px',
+  flexWrap: 'wrap',
+  gap: '10px'
+},
   title:      { color: '#fff', fontSize: '22px', fontWeight: '700', margin: 0 },
   subtitle:   { color: '#6b7280', fontSize: '13px', marginTop: '4px' },
   filters:    { display: 'flex', gap: '6px' },
   filterBtn:  { background: '#1f2937', border: '1px solid #374151', color: '#9ca3af', borderRadius: '8px', padding: '6px 14px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' },
   filterActive:{ background: '#00d4aa22', border: '1px solid #00d4aa44', color: '#00d4aa' },
-  kpiGrid:    { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '12px', marginBottom: '20px' },
+ kpiGrid: {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))',
+  gap: '10px',
+  marginBottom: '16px'
+},
   kpiCard:    { background: '#111827', border: '1px solid #1f2937', borderRadius: '12px', padding: '18px', textAlign: 'center' },
   kpiValue:   { fontSize: '24px', fontWeight: '700', marginBottom: '4px' },
   kpiLabel:   { color: '#6b7280', fontSize: '12px' },
-  row2:       { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' },
-  card:       { background: '#111827', border: '1px solid #1f2937', borderRadius: '12px', padding: '20px', marginBottom: '16px' },
+ row2: {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+  gap: '16px',
+  marginBottom: '16px'
+},
+card: {
+  background: '#111827',
+  border: '1px solid #1f2937',
+  borderRadius: '12px',
+  padding: '16px',
+  marginBottom: '14px'
+},
   cardTitle:  { color: '#fff', fontSize: '14px', fontWeight: '600', margin: '0 0 16px' },
   empty:      { color: '#6b7280', textAlign: 'center', padding: '30px', fontSize: '13px' },
   legend:     { display: 'flex', justifyContent: 'center', gap: '16px', marginTop: '8px' },
   legendItem: { display: 'flex', alignItems: 'center', gap: '6px' },
   tooltip:    { background: '#111827', border: '1px solid #1f2937', borderRadius: '8px', color: '#fff', fontSize: '12px' },
-  recapGrid:  { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px' },
+ recapGrid: {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+  gap: '8px'
+},
   recapItem:  { display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#0f172a', borderRadius: '8px', padding: '10px 14px' },
   recapLabel: { color: '#9ca3af', fontSize: '12px' },
   recapValue: { fontWeight: '700', fontSize: '14px' },

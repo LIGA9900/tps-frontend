@@ -9,18 +9,21 @@ import Journal    from './pages/Journal';
 import Calculator from './pages/Calculator';
 import Stats      from './pages/Stats';
 import Profile    from './pages/Profile';
+import { useEffect, useState } from 'react';
 
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth();
   if (loading) return (
-    <div style={{ color: '#00d4aa', textAlign: 'center', paddingTop: '100px', fontSize: '16px' }}>
+    <div style={{
+      color: '#00d4aa', textAlign: 'center',
+      paddingTop: '100px', fontSize: '16px',
+      background: '#0a0e1a', minHeight: '100vh'
+    }}>
       Chargement...
     </div>
   );
-  // DataProvider est à l'intérieur de PrivateRoute
-  // pour n'être actif que quand l'utilisateur est connecté
   return user
-    ? <DataProvider><Layout>{children}</Layout></DataProvider>
+    ? <DataProvider><LayoutResponsive>{children}</LayoutResponsive></DataProvider>
     : <Navigate to="/login"/>;
 }
 
@@ -38,6 +41,18 @@ function AppRoutes() {
       <Route path="*"           element={<Navigate to="/dashboard"/>}/>
     </Routes>
   );
+}
+
+function LayoutResponsive({ children }) {
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, []);
+
+  return <Layout isMobile={isMobile}>{children}</Layout>;
 }
 
 export default function App() {

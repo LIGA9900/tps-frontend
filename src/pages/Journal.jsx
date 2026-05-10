@@ -366,22 +366,50 @@ function SelectField({ label, options, ...props }) {
 
 const s = {
   page:        { maxWidth: '1200px', margin: '0 auto' },
-  header:      { display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'24px' },
+ header: {
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'flex-start',
+  marginBottom: '20px',
+  flexWrap: 'wrap',
+  gap: '10px'
+},
+
   title:       { color:'#fff', fontSize:'22px', fontWeight:'700', margin:0 },
   subtitle:    { color:'#6b7280', fontSize:'13px', marginTop:'4px' },
   exportBtn:   { display:'flex', alignItems:'center', gap:'8px', background:'#1f2937', border:'1px solid #374151', color:'#9ca3af', fontWeight:'600', borderRadius:'10px', padding:'10px 16px', cursor:'pointer', fontSize:'13px' },
   addBtn:      { display:'flex', alignItems:'center', gap:'8px', background:'linear-gradient(135deg,#00d4aa,#00a8ff)', color:'#000', fontWeight:'700', border:'none', borderRadius:'10px', padding:'10px 18px', cursor:'pointer', fontSize:'13px' },
   formCard:    { background:'#111827', border:'1px solid #1f2937', borderRadius:'12px', padding:'24px', marginBottom:'20px' },
   formTitle:   { color:'#fff', fontSize:'15px', fontWeight:'600', margin:'0 0 20px' },
-  grid3:       { display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'12px', marginBottom:'12px' },
-  grid2:       { display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px', marginBottom:'12px' },
+ grid3: {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
+  gap: '10px',
+  marginBottom: '10px'
+},
+ grid2: {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+  gap: '10px',
+  marginBottom: '10px'
+},
   label:       { display:'block', color:'#9ca3af', fontSize:'12px', fontWeight:'500', marginBottom:'5px' },
   input:       { width:'100%', background:'#1f2937', border:'1px solid #374151', borderRadius:'8px', padding:'9px 12px', color:'#fff', fontSize:'13px', outline:'none', boxSizing:'border-box' },
   textarea:    { width:'100%', background:'#1f2937', border:'1px solid #374151', borderRadius:'8px', padding:'9px 12px', color:'#fff', fontSize:'13px', outline:'none', boxSizing:'border-box', resize:'vertical' },
   calcResult:  { display:'flex', alignItems:'center', gap:'16px', background:'#00d4aa11', border:'1px solid #00d4aa33', borderRadius:'8px', padding:'10px 14px', marginBottom:'12px', fontSize:'13px', color:'#9ca3af', flexWrap:'wrap' },
   submitBtn:   { flex:1, background:'linear-gradient(135deg,#00d4aa,#00a8ff)', color:'#000', fontWeight:'700', border:'none', borderRadius:'10px', padding:'12px 24px', cursor:'pointer', fontSize:'14px' },
   cancelBtn:   { background:'#1f2937', border:'1px solid #374151', color:'#9ca3af', fontWeight:'600', borderRadius:'10px', padding:'12px 20px', cursor:'pointer', fontSize:'14px' },
-  filtersBar:  { display:'flex', alignItems:'center', gap:'16px', background:'#111827', border:'1px solid #1f2937', borderRadius:'10px', padding:'12px 16px', marginBottom:'16px', flexWrap:'wrap' },
+filtersBar: {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '10px',
+  background: '#111827',
+  border: '1px solid #1f2937',
+  borderRadius: '10px',
+  padding: '10px 14px',
+  marginBottom: '14px',
+  flexWrap: 'wrap'
+},
   filterGroup: { display:'flex', alignItems:'center', gap:'8px' },
   filterLabel: { color:'#9ca3af', fontSize:'12px', fontWeight:'500', whiteSpace:'nowrap' },
   filterSelect:{ background:'#1f2937', border:'1px solid #374151', borderRadius:'6px', padding:'5px 10px', color:'#fff', fontSize:'12px', outline:'none', cursor:'pointer' },

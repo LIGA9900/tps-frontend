@@ -153,7 +153,23 @@ export default function Dashboard() {
 const s = {
   page:         { maxWidth: '1100px', margin: '0 auto' },
   loading:      { color: '#00d4aa', textAlign: 'center', paddingTop: '100px', fontSize: '16px' },
-  header:       { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' },
+ header: {
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'flex-start',
+  marginBottom: '16px',
+  flexWrap: 'wrap',
+  gap: '10px'
+},
+capitalBadge: {
+  background: '#00d4aa22',
+  border: '1px solid #00d4aa44',
+  color: '#00d4aa',
+  padding: '8px 14px',
+  borderRadius: '12px',
+  fontSize: '16px',
+  fontWeight: '700'
+},
   title:        { color: '#fff', fontSize: '24px', fontWeight: '700', margin: 0 },
   subtitle:     { color: '#6b7280', fontSize: '14px', marginTop: '4px' },
   capitalBadge: { background: '#00d4aa22', border: '1px solid #00d4aa44', color: '#00d4aa', padding: '10px 20px', borderRadius: '12px', fontSize: '18px', fontWeight: '700' },
@@ -165,8 +181,12 @@ const s = {
   progressFill: { background: 'linear-gradient(90deg, #00d4aa, #00a8ff)', height: '100%', borderRadius: '99px', transition: 'width 0.5s' },
   growthFooter: { display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '4px' },
   growthText:   { color: '#6b7280', fontSize: '12px' },
-  statsGrid:    { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '12px', marginBottom: '20px' },
-  statCard:     { background: '#111827', border: '1px solid #1f2937', borderRadius: '12px', padding: '20px', textAlign: 'center' },
+statsGrid: {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',
+  gap: '10px',
+  marginBottom: '16px'
+},  statCard:     { background: '#111827', border: '1px solid #1f2937', borderRadius: '12px', padding: '20px', textAlign: 'center' },
   statIcon:     { marginBottom: '8px', display: 'flex', justifyContent: 'center' },
   statValue:    { fontSize: '22px', fontWeight: '700', marginBottom: '4px' },
   statLabel:    { color: '#6b7280', fontSize: '12px' },
