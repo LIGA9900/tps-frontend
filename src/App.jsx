@@ -10,6 +10,7 @@ import Calculator from './pages/Calculator';
 import Stats      from './pages/Stats';
 import Profile    from './pages/Profile';
 import { useEffect, useState } from 'react';
+import UpdateNotification from './components/UpdateNotification';
 
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth();
@@ -60,6 +61,7 @@ export default function App() {
     <BrowserRouter>
       <AuthProvider>
         <AppRoutes />
+        <UpdateNotification />
       </AuthProvider>
     </BrowserRouter>
   );
