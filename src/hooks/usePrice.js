@@ -1,49 +1,61 @@
 import { useState, useEffect, useCallback } from 'react';
 
-const FINNHUB_KEY = import.meta.env.VITE_FINNHUB_KEY;
+const TWELVEDATA_KEY = import.meta.env.VITE_TWELVEDATA_KEY;
 
-// Mapping des actifs vers les symboles Finnhub
+// Symboles TwelveData
 const SYMBOLS = {
-  'XAUUSD': 'OANDA:XAU_USD',
-  'EURUSD': 'OANDA:EUR_USD',
-  'GBPUSD': 'OANDA:GBP_USD',
-  'USDJPY': 'OANDA:USD_JPY',
-  'BTCUSD': 'BINANCE:BTCUSDT',
-  'NAS100': 'OANDA:NAS100_USD',
-  'US30':   'OANDA:US30_USD',
-  'GBPJPY': 'OANDA:GBP_JPY',
+  'XAUUSD': 'XAU/USD',
+  'XAGUSD': 'XAG/USD',
+  'EURUSD': 'EUR/USD',
+  'GBPUSD': 'GBP/USD',
+  'USDJPY': 'USD/JPY',
+  'GBPJPY': 'GBP/JPY',
+  'BTCUSD': 'BTC/USD',
+  'NAS100': 'NDX',
+  'US30':   'DJI',
 };
 
 export function usePrice(asset) {
-  const [price, setPrice]     = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError]     = useState(null);
+  const [price, setPrice]           = useState(null);
+  const [loading, setLoading]       = useState(false);
+  const [error, setError]           = useState(null);
   const [lastUpdate, setLastUpdate] = useState(null);
 
   const fetchPrice = useCallback(async () => {
-    if (!asset || !FINNHUB_KEY) return;
+    if (!TWELVEDATA_KEY) {
+      setError('Clé API manquante');
+      return;
+    }
 
     const symbol = SYMBOLS[asset];
-    if (!symbol) return;
+    if (!symbol) {
+      setError('Actif non supporté');
+      return;
+    }
 
     setLoading(true);
     setError(null);
 
     try {
-      const res = await fetch(
-        `https://finnhub.io/api/v1/quote?symbol=${symbol}&token=${FINNHUB_KEY}`
-      );
-      const data = await res.json();
+      // Récupérer prix actuel ET stats du jour
+      const [priceRes, statsRes] = await Promise.all([
+        fetch(`https://api.twelvedata.com/price?symbol=${symbol}&apikey=${TWELVEDATA_KEY}`),
+        fetch(`https://api.twelvedata.com/quote?symbol=${symbol}&apikey=${TWELVEDATA_KEY}`),
+      ]);
 
-      if (data.c && data.c > 0) {
-        setPrice({
-          current:  data.c,  // Prix actuel
-          open:     data.o,  // Prix d'ouverture
-          high:     data.h,  // Plus haut
-          low:      data.l,  // Plus bas
-          change:   parseFloat((data.c - data.pc).toFixed(2)),
-          changePct: parseFloat(((data.c - data.pc) / data.pc * 100).toFixed(2)),
-        });
+      const priceData = await priceRes.json();
+      const statsData = await statsRes.json();
+
+      if (priceData.price) {
+        const current  = parseFloat(parseFloat(priceData.price).toFixed(2));
+        const open     = parseFloat(parseFloat(statsData.open   || current).toFixed(2));
+        const high     = parseFloat(parseFloat(statsData.high   || current).toFixed(2));
+        const low      = parseFloat(parseFloat(statsData.low    || current).toFixed(2));
+        const close    = parseFloat(parseFloat(statsData.previous_close || current).toFixed(2));
+        const change   = parseFloat((current - close).toFixed(2));
+        const changePct= parseFloat(((current - close) / close * 100).toFixed(2));
+
+        setPrice({ current, open, high, low, change, changePct });
         setLastUpdate(new Date());
       } else {
         setError('Prix non disponible');
@@ -55,14 +67,11 @@ export function usePrice(asset) {
     }
   }, [asset]);
 
-  // Charger au montage et à chaque changement d'actif
-  useEffect(() => {
-    fetchPrice();
-  }, [fetchPrice]);
+  useEffect(() => { fetchPrice(); }, [fetchPrice]);
 
-  // Rafraîchir automatiquement toutes les 30 secondes
+  // Rafraîchir toutes les 60 secondes
   useEffect(() => {
-    const interval = setInterval(fetchPrice, 30000);
+    const interval = setInterval(fetchPrice, 60000);
     return () => clearInterval(interval);
   }, [fetchPrice]);
 
