@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import { Calculator, TrendingUp, TrendingDown, Zap } from 'lucide-react';
+import PriceWidget from '../components/PriceWidget';
 
 const ASSETS = ['XAUUSD','EURUSD','GBPUSD','USDJPY','BTCUSD','NAS100','US30','GBPJPY'];
 
@@ -15,6 +16,11 @@ export default function CalculatorPage() {
   const capital = parseFloat(user?.capital || 20);
 
   const handleChange = e => setForm({ ...form, [e.target.name]: e.target.value });
+
+  // ✅ Utiliser le prix en temps réel comme entrée
+  const handleUsePrice = (price) => {
+    setForm(prev => ({ ...prev, entry: price.toFixed(2) }));
+  };
 
   const calculate = async (e) => {
     e.preventDefault();
@@ -68,23 +74,32 @@ export default function CalculatorPage() {
       <div style={s.growthCard}>
         <Zap size={16} color="#f59e0b"/>
         <span style={s.growthPhase}>{growth.label}</span>
-        <span style={s.growthRisk}>Risque : <strong style={{color:'#00d4aa'}}>{growth.risk}%</strong></span>
-        <button onClick={() => setForm({...form, risk_percent: growth.risk})} style={s.applyBtn}>
+        <span style={s.growthRisk}>
+          Risque : <strong style={{color:'#00d4aa'}}>{growth.risk}%</strong>
+        </span>
+        <button
+          onClick={() => setForm({...form, risk_percent: growth.risk})}
+          style={s.applyBtn}>
           Appliquer
         </button>
       </div>
 
-      {/* Layout responsive : colonne sur mobile, 2 colonnes sur desktop */}
+      {/* Layout responsive */}
       <div style={s.layout}>
 
         {/* Formulaire */}
         <div style={s.formCard}>
           <h3 style={s.cardTitle}>Paramètres du Trade</h3>
+
+          {/* ✅ Widget Prix Temps Réel */}
+          <PriceWidget asset={form.asset} onUsePrice={handleUsePrice}/>
+
           <form onSubmit={calculate} style={s.form}>
 
             <div>
               <label style={s.label}>Capital actuel</label>
-              <input value={`${capital} $`} disabled
+              <input
+                value={`${capital} $`} disabled
                 style={{...s.input, color:'#00d4aa', fontWeight:'700'}}/>
             </div>
 
@@ -97,29 +112,45 @@ export default function CalculatorPage() {
 
             <div>
               <label style={s.label}>Risque (%)</label>
-              <input name="risk_percent" type="number" step="0.1"
+              <input
+                name="risk_percent" type="number" step="0.1"
                 value={form.risk_percent} onChange={handleChange}
                 placeholder={`Recommandé : ${growth.risk}%`}
                 style={s.input} required/>
             </div>
 
             <div>
-              <label style={s.label}>Prix d'entrée</label>
-              <input name="entry" type="number" step="0.00001"
+              <label style={s.label}>
+                Prix d'entrée
+                {form.entry && (
+                  <span style={{color:'#00d4aa', marginLeft:'8px', fontSize:'11px'}}>
+                    ✓ {form.entry}
+                  </span>
+                )}
+              </label>
+              <input
+                name="entry" type="number" step="0.00001"
                 value={form.entry} onChange={handleChange}
-                placeholder="4547.00" style={s.input} required/>
+                placeholder="Clique sur le prix ci-dessus ou entre manuellement"
+                style={{
+                  ...s.input,
+                  borderColor: form.entry ? '#00d4aa44' : '#374151'
+                }}
+                required/>
             </div>
 
             <div>
               <label style={s.label}>Stop Loss</label>
-              <input name="sl" type="number" step="0.00001"
+              <input
+                name="sl" type="number" step="0.00001"
                 value={form.sl} onChange={handleChange}
                 placeholder="4540.00" style={s.input} required/>
             </div>
 
             <div>
               <label style={s.label}>Take Profit (optionnel)</label>
-              <input name="tp" type="number" step="0.00001"
+              <input
+                name="tp" type="number" step="0.00001"
                 value={form.tp} onChange={handleChange}
                 placeholder="4561.00" style={s.input}/>
             </div>
@@ -137,15 +168,13 @@ export default function CalculatorPage() {
             <div style={s.resultCard}>
               <h3 style={s.cardTitle}>📊 Résultat</h3>
               <div style={s.resultGrid}>
-                <ResultItem label="LOT À TRADER"  value={result.lot}           color="#00d4aa" big/>
-                <ResultItem label="RISQUE ($)"     value={`${result.risk_dollar}$`}  color="#f59e0b" big/>
-                <ResultItem label="RISQUE (%)"     value={`${result.risk_percent}%`} color="#00a8ff"/>
+                <ResultItem label="LOT À TRADER"  value={result.lot}                color="#00d4aa" big/>
+                <ResultItem label="RISQUE ($)"     value={`${result.risk_dollar}$`} color="#f59e0b" big/>
+                <ResultItem label="RISQUE (%)"     value={`${result.risk_percent}%`}color="#00a8ff"/>
                 <ResultItem label="DISTANCE SL"    value={`${result.sl_distance} pts`} color="#9b6dff"/>
               </div>
               {result.formula && (
-                <div style={s.formula}>
-                  📐 {result.formula}
-                </div>
+                <div style={s.formula}>📐 {result.formula}</div>
               )}
             </div>
           )}
@@ -169,7 +198,9 @@ export default function CalculatorPage() {
               </div>
               <div style={s.rrBox}>
                 <span style={{color:'#6b7280', fontSize:'13px'}}>Risk/Reward :</span>
-                <span style={{color:'#fff', fontWeight:'700', fontSize:'18px'}}>1 : {simResult.rr_ratio}</span>
+                <span style={{color:'#fff', fontWeight:'700', fontSize:'18px'}}>
+                  1 : {simResult.rr_ratio}
+                </span>
               </div>
             </div>
           )}
@@ -202,7 +233,6 @@ const s = {
   header:     { marginBottom: '16px' },
   title:      { color: '#fff', fontSize: '20px', fontWeight: '700', margin: 0 },
   subtitle:   { color: '#6b7280', fontSize: '13px', marginTop: '4px' },
-
   growthCard: {
     display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap',
     background: '#111827', border: '1px solid #f59e0b44',
@@ -215,15 +245,12 @@ const s = {
     color: '#f59e0b', borderRadius: '6px', padding: '6px 14px',
     cursor: 'pointer', fontSize: '12px', fontWeight: '600'
   },
-
-  // ✅ RESPONSIVE : colonne sur mobile, 2 colonnes sur desktop
   layout: {
     display: 'grid',
     gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
     gap: '16px',
     alignItems: 'start',
   },
-
   formCard:   { background: '#111827', border: '1px solid #1f2937', borderRadius: '12px', padding: '20px' },
   form:       { display: 'flex', flexDirection: 'column', gap: '12px' },
   cardTitle:  { color: '#fff', fontSize: '14px', fontWeight: '600', margin: '0 0 14px' },
@@ -239,7 +266,6 @@ const s = {
     color: '#000', fontWeight: '700', border: 'none',
     borderRadius: '10px', padding: '13px', cursor: 'pointer', fontSize: '15px'
   },
-
   resultsCol: { display: 'flex', flexDirection: 'column', gap: '14px' },
   resultCard: { background: '#111827', border: '1px solid #1f2937', borderRadius: '12px', padding: '20px' },
   resultGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' },
@@ -247,7 +273,6 @@ const s = {
     marginTop: '12px', background: '#0f172a', borderRadius: '8px',
     padding: '10px 12px', fontSize: '11px', color: '#6b7280', wordBreak: 'break-all'
   },
-
   simCard:    { background: '#111827', border: '1px solid #1f2937', borderRadius: '12px', padding: '20px' },
   simGrid:    { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' },
   simItem:    { border: '1px solid', borderRadius: '10px', padding: '14px', textAlign: 'center' },
