@@ -12,6 +12,7 @@ const navItems = [
   { path: '/calculator',  icon: <Calculator size={18}/>,      label: 'Calculateur'  },
   { path: '/stats',       icon: <BarChart2 size={18}/>,       label: 'Statistiques' },
   { path: '/profile',     icon: <User size={18}/>,            label: 'Mon Profil'   },
+  { path: '/ai-coach', icon: <Brain size={18}/>, label: 'IA Coach' },
 ];
 
 export default function Layout({ children }) {

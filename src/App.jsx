@@ -11,6 +11,7 @@ import Stats      from './pages/Stats';
 import Profile    from './pages/Profile';
 import { useEffect, useState } from 'react';
 import UpdateNotification from './components/UpdateNotification';
+import AICoach from './pages/AICoach';
 
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth();
@@ -40,6 +41,7 @@ function AppRoutes() {
       <Route path="/stats"      element={<PrivateRoute><Stats/></PrivateRoute>}/>
       <Route path="/profile"    element={<PrivateRoute><Profile/></PrivateRoute>}/>
       <Route path="*"           element={<Navigate to="/dashboard"/>}/>
+      <Route path="/ai-coach" element={<PrivateRoute><AICoach/></PrivateRoute>}/>
     </Routes>
   );
 }
