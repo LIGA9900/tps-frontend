@@ -142,7 +142,7 @@ export default function Journal() {
       comment:      trade.comment      || '',
     });
     setEditingId(trade.id);
-    setPreview(trade.screenshot_url || null);
+    setPreview(trade.screenshot || null);
     setShowForm(true);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -349,12 +349,12 @@ export default function Journal() {
                   }}>
                     {/* Screenshot thumbnail */}
                     <td style={s.td}>
-                      {trade.screenshot_url ? (
+                      {trade.screenshot ?(
                         <img
                           src={trade.screenshot_url}
                           alt="screenshot"
                           style={s.thumbnail}
-                          onClick={() => setZoomImage(trade.screenshot_url)}
+                          onClick={() => setZoomImage(trade.screenshot )}
                         />
                       ) : (
                         <div style={s.noScreenshot}>-</div>
