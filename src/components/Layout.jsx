@@ -3,7 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
   LayoutDashboard, BookOpen, Calculator,
-  BarChart2, LogOut, TrendingUp, Menu, X, User
+  BarChart2, LogOut, TrendingUp, Menu, X, User, Brain
 } from 'lucide-react';
 
 const navItems = [
