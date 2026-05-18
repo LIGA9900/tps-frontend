@@ -1,23 +1,37 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
 import { Brain, TrendingUp, AlertTriangle, Target, RefreshCw, Sparkles } from 'lucide-react';
 
-const GEMINI_KEY = import.meta.env.VITE_GEMINI_KEY;
-
 export default function AICoach() {
-  const { user }              = useAuth();
-  const { dashboard, trades } = useData();
-  const [analysis, setAnalysis] = useState(null);
-  const [loading, setLoading]   = useState(false);
-  const [error, setError]       = useState(null);
+  const { user }                    = useAuth();
+  const { dashboard, trades, refresh } = useData();
+  const [analysis, setAnalysis]     = useState(null);
+  const [loading, setLoading]       = useState(false);
+  const [error, setError]           = useState(null);
+
+  // ✅ Charger les données au montage
+  useEffect(() => {
+    refresh();
+  }, []);
+
+  const GEMINI_KEY = import.meta.env.VITE_GEMINI_KEY;
 
   const stats  = dashboard?.stats  || {};
   const growth = dashboard?.growth || {};
 
   const analyzeWithAI = async () => {
+    // Debug — vérifier la clé
+    console.log('Clé Gemini présente:', !!GEMINI_KEY);
+    console.log('Nombre de trades:', trades?.length);
+
     if (!trades || trades.length === 0) {
       setError('Aucun trade à analyser. Commence par enregistrer des trades dans le Journal !');
+      return;
+    }
+
+    if (!GEMINI_KEY) {
+      setError('Clé API Gemini manquante. Contacte le support.');
       return;
     }
 
@@ -26,7 +40,6 @@ export default function AICoach() {
     setAnalysis(null);
 
     try {
-      // Préparer les données
       const tradingData = {
         trader: {
           name:            user?.name,
@@ -46,9 +59,9 @@ export default function AICoach() {
         },
         progression: {
           phase:       growth.phase,
-          risque:      growth.risk_percent + '%',
-          objectif:    growth.next_target + '$',
-          progression: growth.progress_percent + '%',
+          risque:      (growth.risk_percent || 0) + '%',
+          objectif:    (growth.next_target  || 0) + '$',
+          progression: (growth.progress_percent || 0) + '%',
         },
         par_setup: trades.reduce((acc, t) => {
           const key = t.setup || 'Sans setup';
@@ -66,14 +79,14 @@ export default function AICoach() {
           return acc;
         }, {}),
         derniers_trades: trades.slice(0, 10).map(t => ({
-          date:    t.date,
-          actif:   t.asset,
-          type:    t.type,
-          setup:   t.setup || 'Non spécifié',
-          risque:  t.risk_percent + '%',
-          resultat:t.result,
-          profit:  t.profit + '$',
-          rr:      t.rr_ratio,
+          date:     t.date,
+          actif:    t.asset,
+          type:     t.type,
+          setup:    t.setup    || 'Non spécifié',
+          risque:   t.risk_percent + '%',
+          resultat: t.result,
+          profit:   t.profit   + '$',
+          rr:       t.rr_ratio,
         })),
       };
 
@@ -92,16 +105,13 @@ Réponds UNIQUEMENT avec un JSON valide (sans markdown, sans backticks) avec cet
   "message_motivation": "message court motivant"
 }`;
 
-      // Appel à Gemini API
       const response = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            contents: [{
-              parts: [{ text: prompt }]
-            }],
+            contents: [{ parts: [{ text: prompt }] }],
             generationConfig: {
               temperature:     0.7,
               maxOutputTokens: 1500,
@@ -111,20 +121,22 @@ Réponds UNIQUEMENT avec un JSON valide (sans markdown, sans backticks) avec cet
       );
 
       const data = await response.json();
+      console.log('Réponse Gemini:', data);
 
       if (data.error) {
         throw new Error(data.error.message);
       }
 
-      // Extraire le texte de la réponse Gemini
-      const text    = data.candidates[0].content.parts[0].text;
+      const text    = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!text) throw new Error('Réponse vide de Gemini');
+
       const cleaned = text.replace(/```json|```/g, '').trim();
       const parsed  = JSON.parse(cleaned);
       setAnalysis(parsed);
 
     } catch (err) {
-      console.error('Erreur IA:', err);
-      setError('Erreur lors de l\'analyse : ' + err.message);
+      console.error('Erreur IA complète:', err);
+      setError('Erreur : ' + err.message);
     } finally {
       setLoading(false);
     }
@@ -139,7 +151,6 @@ Réponds UNIQUEMENT avec un JSON valide (sans markdown, sans backticks) avec cet
   return (
     <div style={s.page}>
 
-      {/* Header */}
       <div style={s.header}>
         <div>
           <h1 style={s.title}>🤖 IA Coach</h1>
@@ -150,19 +161,14 @@ Réponds UNIQUEMENT avec un JSON valide (sans markdown, sans backticks) avec cet
         </div>
       </div>
 
-      {/* Carte principale */}
       <div style={s.analyzeCard}>
-        <div style={s.analyzeIcon}>
-          <Sparkles size={32} color="#9b6dff"/>
-        </div>
+        <div style={s.analyzeIcon}><Sparkles size={32} color="#9b6dff"/></div>
         <div style={s.analyzeTitle}>Analyse IA de tes performances</div>
         <div style={s.analyzeSubtitle}>
           Gemini va analyser tes {trades?.length || 0} trades et te donner
           un coaching sur tes forces, faiblesses et un plan d'action concret.
         </div>
-        <button
-          onClick={analyzeWithAI}
-          disabled={loading}
+        <button onClick={analyzeWithAI} disabled={loading}
           style={{ ...s.analyzeBtn, opacity: loading ? 0.7 : 1 }}>
           {loading
             ? <><RefreshCw size={16} style={{animation:'spin 1s linear infinite'}}/> Analyse en cours...</>
@@ -175,12 +181,8 @@ Réponds UNIQUEMENT avec un JSON valide (sans markdown, sans backticks) avec cet
         `}</style>
       </div>
 
-      {/* Erreur */}
-      {error && (
-        <div style={s.errorBox}>⚠️ {error}</div>
-      )}
+      {error && <div style={s.errorBox}>⚠️ {error}</div>}
 
-      {/* Loading */}
       {loading && (
         <div style={s.loadingCard}>
           <div style={s.loadingDots}>
@@ -193,11 +195,9 @@ Réponds UNIQUEMENT avec un JSON valide (sans markdown, sans backticks) avec cet
         </div>
       )}
 
-      {/* Résultats */}
       {analysis && (
         <div style={s.results}>
 
-          {/* Score */}
           <div style={s.scoreCard}>
             <div>
               <div style={s.scoreLabel}>Score de Performance</div>
@@ -205,11 +205,7 @@ Réponds UNIQUEMENT avec un JSON valide (sans markdown, sans backticks) avec cet
                 {analysis.score_global}/100
               </div>
               <div style={s.scoreBar}>
-                <div style={{
-                  ...s.scoreBarFill,
-                  width: `${analysis.score_global}%`,
-                  background: scoreColor(analysis.score_global),
-                }}/>
+                <div style={{...s.scoreBarFill, width:`${analysis.score_global}%`, background: scoreColor(analysis.score_global)}}/>
               </div>
             </div>
             <div style={s.motivationBox}>
@@ -218,44 +214,14 @@ Réponds UNIQUEMENT avec un JSON valide (sans markdown, sans backticks) avec cet
             </div>
           </div>
 
-          {/* Sections */}
           {[
-            {
-              icon:  <TrendingUp size={18} color="#00d4aa"/>,
-              title: '🏆 Points Forts',
-              color: '#00d4aa',
-              items: analysis.points_forts,
-              dot:   'green',
-              symbol:'✓',
-            },
-            {
-              icon:  <AlertTriangle size={18} color="#ef4444"/>,
-              title: '⚠️ Points à Améliorer',
-              color: '#ef4444',
-              items: analysis.points_ameliorer,
-              dot:   'red',
-              symbol:'!',
-            },
-            {
-              icon:  <Brain size={18} color="#9b6dff"/>,
-              title: '🧠 Analyse Psychologique',
-              color: '#9b6dff',
-              items: analysis.analyse_psychologique,
-              dot:   'purple',
-              symbol:'→',
-            },
-            {
-              icon:  <Target size={18} color="#f59e0b"/>,
-              title: '🎯 Plan d\'Action',
-              color: '#f59e0b',
-              items: analysis.plan_action,
-              dot:   'orange',
-              numbered: true,
-            },
+            { title:'🏆 Points Forts',           color:'#00d4aa', items: analysis.points_forts,           dot:'green',  symbol:'✓' },
+            { title:'⚠️ Points à Améliorer',      color:'#ef4444', items: analysis.points_ameliorer,       dot:'red',    symbol:'!' },
+            { title:'🧠 Analyse Psychologique',   color:'#9b6dff', items: analysis.analyse_psychologique,  dot:'purple', symbol:'→' },
+            { title:'🎯 Plan d\'Action',          color:'#f59e0b', items: analysis.plan_action,            dot:'orange', numbered: true },
           ].map((section, si) => (
             <div key={si} style={s.section}>
               <div style={s.sectionHeader}>
-                {section.icon}
                 <span style={{...s.sectionTitle, color: section.color}}>{section.title}</span>
               </div>
               <div style={s.sectionContent}>
@@ -271,11 +237,9 @@ Réponds UNIQUEMENT avec un JSON valide (sans markdown, sans backticks) avec cet
             </div>
           ))}
 
-          {/* Relancer */}
           <button onClick={analyzeWithAI} style={s.reanalyzeBtn}>
             <RefreshCw size={14}/> Relancer l'analyse
           </button>
-
         </div>
       )}
     </div>
@@ -291,10 +255,9 @@ function getDotStyle(color) {
   };
   const c = colors[color] || colors.green;
   return {
-    flexShrink: 0,
-    width: '22px', height: '22px',
-    borderRadius: '50%',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    flexShrink: 0, width: '22px', height: '22px',
+    borderRadius: '50%', display: 'flex',
+    alignItems: 'center', justifyContent: 'center',
     fontSize: '11px', fontWeight: '700',
     background: c.bg, color: c.text,
   };
@@ -307,21 +270,17 @@ const s = {
   subtitle:      { color:'#6b7280', fontSize:'13px', marginTop:'4px' },
   badge:         { background:'#9b6dff22', border:'1px solid #9b6dff44', borderRadius:'8px', padding:'6px 12px' },
   badgeText:     { color:'#9b6dff', fontSize:'12px', fontWeight:'600' },
-
   analyzeCard:   { background:'#111827', border:'1px solid #9b6dff44', borderRadius:'16px', padding:'28px', marginBottom:'20px', display:'flex', flexDirection:'column', alignItems:'center', textAlign:'center', gap:'14px' },
   analyzeIcon:   { background:'#9b6dff22', borderRadius:'50%', width:'64px', height:'64px', display:'flex', alignItems:'center', justifyContent:'center' },
   analyzeTitle:  { color:'#fff', fontSize:'16px', fontWeight:'700' },
   analyzeSubtitle:{ color:'#6b7280', fontSize:'13px', lineHeight:'1.6', maxWidth:'400px' },
   analyzeBtn:    { display:'flex', alignItems:'center', gap:'8px', background:'linear-gradient(135deg,#9b6dff,#00a8ff)', color:'#fff', fontWeight:'700', border:'none', borderRadius:'12px', padding:'14px 28px', cursor:'pointer', fontSize:'15px' },
-
   errorBox:      { background:'#ef444411', border:'1px solid #ef444444', borderRadius:'10px', padding:'14px', color:'#ef4444', fontSize:'13px', marginBottom:'16px' },
-
   loadingCard:   { background:'#111827', border:'1px solid #1f2937', borderRadius:'12px', padding:'40px', textAlign:'center', marginBottom:'20px' },
   loadingDots:   { display:'flex', justifyContent:'center', gap:'8px', marginBottom:'16px' },
   dot:           { width:'12px', height:'12px', background:'#9b6dff', borderRadius:'50%', animation:'bounce 1.4s infinite ease-in-out' },
   loadingText:   { color:'#fff', fontSize:'15px', fontWeight:'600', marginBottom:'6px' },
   loadingSubtext:{ color:'#6b7280', fontSize:'12px' },
-
   results:       { display:'flex', flexDirection:'column', gap:'14px' },
   scoreCard:     { background:'#111827', border:'1px solid #1f2937', borderRadius:'12px', padding:'20px', display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(200px, 1fr))', gap:'20px' },
   scoreLabel:    { color:'#6b7280', fontSize:'12px', marginBottom:'6px' },
@@ -331,13 +290,11 @@ const s = {
   motivationBox: { background:'#0f172a', borderRadius:'10px', padding:'14px', display:'flex', gap:'10px', alignItems:'flex-start' },
   motivationIcon:{ fontSize:'20px', flexShrink:0 },
   motivationText:{ color:'#d1d5db', fontSize:'13px', fontStyle:'italic', lineHeight:'1.6' },
-
   section:       { background:'#111827', border:'1px solid #1f2937', borderRadius:'12px', padding:'18px' },
   sectionHeader: { display:'flex', alignItems:'center', gap:'8px', marginBottom:'14px' },
   sectionTitle:  { fontSize:'14px', fontWeight:'700' },
   sectionContent:{ display:'flex', flexDirection:'column', gap:'10px' },
   item:          { display:'flex', gap:'10px', alignItems:'flex-start' },
   itemText:      { color:'#d1d5db', fontSize:'13px', lineHeight:'1.6', flex:1 },
-
   reanalyzeBtn:  { display:'flex', alignItems:'center', justifyContent:'center', gap:'8px', background:'#1f2937', border:'1px solid #374151', color:'#9ca3af', borderRadius:'10px', padding:'12px', cursor:'pointer', fontSize:'13px', fontWeight:'600' },
 };
