@@ -1,17 +1,18 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { DataProvider } from './context/DataContext';
-import Layout     from './components/Layout';
-import Login      from './pages/Login';
-import Register   from './pages/Register';
-import Dashboard  from './pages/Dashboard';
-import Journal    from './pages/Journal';
-import Calculator from './pages/Calculator';
-import Stats      from './pages/Stats';
-import Profile    from './pages/Profile';
+import Layout          from './components/Layout';
+import Login           from './pages/Login';
+import Register        from './pages/Register';
+import Dashboard       from './pages/Dashboard';
+import Journal         from './pages/Journal';
+import Calculator      from './pages/Calculator';
+import Stats           from './pages/Stats';
+import Profile         from './pages/Profile';
+import AICoach         from './pages/AICoach';
+import MarketAnalysis  from './pages/MarketAnalysis';
 import { useEffect, useState } from 'react';
 import UpdateNotification from './components/UpdateNotification';
-import AICoach from './pages/AICoach';
 
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth();
@@ -33,15 +34,16 @@ function AppRoutes() {
   const { user } = useAuth();
   return (
     <Routes>
-      <Route path="/login"      element={user ? <Navigate to="/dashboard"/> : <Login/>}/>
-      <Route path="/register"   element={user ? <Navigate to="/dashboard"/> : <Register/>}/>
-      <Route path="/dashboard"  element={<PrivateRoute><Dashboard/></PrivateRoute>}/>
-      <Route path="/journal"    element={<PrivateRoute><Journal/></PrivateRoute>}/>
-      <Route path="/calculator" element={<PrivateRoute><Calculator/></PrivateRoute>}/>
-      <Route path="/stats"      element={<PrivateRoute><Stats/></PrivateRoute>}/>
-      <Route path="/profile"    element={<PrivateRoute><Profile/></PrivateRoute>}/>
-      <Route path="*"           element={<Navigate to="/dashboard"/>}/>
-      <Route path="/ai-coach" element={<PrivateRoute><AICoach/></PrivateRoute>}/>
+      <Route path="/login"           element={user ? <Navigate to="/dashboard"/> : <Login/>}/>
+      <Route path="/register"        element={user ? <Navigate to="/dashboard"/> : <Register/>}/>
+      <Route path="/dashboard"       element={<PrivateRoute><Dashboard/></PrivateRoute>}/>
+      <Route path="/journal"         element={<PrivateRoute><Journal/></PrivateRoute>}/>
+      <Route path="/calculator"      element={<PrivateRoute><Calculator/></PrivateRoute>}/>
+      <Route path="/stats"           element={<PrivateRoute><Stats/></PrivateRoute>}/>
+      <Route path="/profile"         element={<PrivateRoute><Profile/></PrivateRoute>}/>
+      <Route path="/ai-coach"        element={<PrivateRoute><AICoach/></PrivateRoute>}/>
+      <Route path="/market-analysis" element={<PrivateRoute><MarketAnalysis/></PrivateRoute>}/>
+      <Route path="*"                element={<Navigate to="/dashboard"/>}/>
     </Routes>
   );
 }

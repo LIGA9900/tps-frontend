@@ -7,12 +7,13 @@ import {
 } from 'lucide-react';
 
 const navItems = [
-  { path: '/dashboard',   icon: <LayoutDashboard size={18}/>, label: 'Dashboard'    },
-  { path: '/journal',     icon: <BookOpen size={18}/>,        label: 'Journal'      },
-  { path: '/calculator',  icon: <Calculator size={18}/>,      label: 'Calculateur'  },
-  { path: '/stats',       icon: <BarChart2 size={18}/>,       label: 'Statistiques' },
-  { path: '/profile',     icon: <User size={18}/>,            label: 'Mon Profil'   },
-  { path: '/ai-coach', icon: <Brain size={18}/>, label: 'IA Coach' },
+  { path: '/dashboard',        icon: <LayoutDashboard size={18}/>, label: 'Dashboard'       },
+  { path: '/journal',          icon: <BookOpen size={18}/>,        label: 'Journal'         },
+  { path: '/calculator',       icon: <Calculator size={18}/>,      label: 'Calculateur'     },
+  { path: '/stats',            icon: <BarChart2 size={18}/>,       label: 'Statistiques'    },
+  { path: '/profile',          icon: <User size={18}/>,            label: 'Mon Profil'      },
+  { path: '/ai-coach',         icon: <Brain size={18}/>,           label: 'IA Coach'        },
+  { path: '/market-analysis',  icon: <TrendingUp size={18}/>,      label: 'Analyse Marché'  },
 ];
 
 export default function Layout({ children }) {
