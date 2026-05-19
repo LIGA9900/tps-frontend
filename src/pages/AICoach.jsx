@@ -99,7 +99,7 @@ Réponds UNIQUEMENT avec un JSON valide (sans markdown, sans backticks) avec cet
           'X-Title':       'TPS Trading Coach',
         },
         body: JSON.stringify({
-          model: 'meta-llama/llama-3.3-70b-instruct:free',
+          model: 'deepseek/deepseek-v4-flash:free',
           messages: [{ role: 'user', content: prompt }],
           max_tokens: 1500,
           temperature: 0.7,
