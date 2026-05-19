@@ -99,7 +99,7 @@ Réponds UNIQUEMENT avec un JSON valide (sans markdown, sans backticks) avec cet
           'X-Title':       'TPS Trading Coach',
         },
         body: JSON.stringify({
-          model: 'google/gemini-2.0-flash-exp:free',
+          model: 'meta-llama/llama-3.3-70b-instruct:free',
           messages: [{ role: 'user', content: prompt }],
           max_tokens: 1500,
           temperature: 0.7,
