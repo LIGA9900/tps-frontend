@@ -1,37 +1,29 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
-import { Brain, TrendingUp, AlertTriangle, Target, RefreshCw, Sparkles } from 'lucide-react';
+import { Brain, RefreshCw, Sparkles } from 'lucide-react';
 
 export default function AICoach() {
-  const { user }                    = useAuth();
+  const { user }                       = useAuth();
   const { dashboard, trades, refresh } = useData();
-  const [analysis, setAnalysis]     = useState(null);
-  const [loading, setLoading]       = useState(false);
-  const [error, setError]           = useState(null);
+  const [analysis, setAnalysis]        = useState(null);
+  const [loading, setLoading]          = useState(false);
+  const [error, setError]              = useState(null);
 
-  // ✅ Charger les données au montage
-  useEffect(() => {
-    refresh();
-  }, []);
+  useEffect(() => { refresh(); }, []);
 
-  const GEMINI_KEY = import.meta.env.VITE_GEMINI_KEY;
+  const OPENROUTER_KEY = import.meta.env.VITE_OPENROUTER_KEY;
 
   const stats  = dashboard?.stats  || {};
   const growth = dashboard?.growth || {};
 
   const analyzeWithAI = async () => {
-    // Debug — vérifier la clé
-    console.log('Clé Gemini présente:', !!GEMINI_KEY);
-    console.log('Nombre de trades:', trades?.length);
-
     if (!trades || trades.length === 0) {
       setError('Aucun trade à analyser. Commence par enregistrer des trades dans le Journal !');
       return;
     }
-
-    if (!GEMINI_KEY) {
-      setError('Clé API Gemini manquante. Contacte le support.');
+    if (!OPENROUTER_KEY) {
+      setError('Clé API manquante.');
       return;
     }
 
@@ -59,8 +51,8 @@ export default function AICoach() {
         },
         progression: {
           phase:       growth.phase,
-          risque:      (growth.risk_percent || 0) + '%',
-          objectif:    (growth.next_target  || 0) + '$',
+          risque:      (growth.risk_percent    || 0) + '%',
+          objectif:    (growth.next_target     || 0) + '$',
           progression: (growth.progress_percent || 0) + '%',
         },
         par_setup: trades.reduce((acc, t) => {
@@ -71,21 +63,14 @@ export default function AICoach() {
           acc[key].profit += parseFloat(t.profit || 0);
           return acc;
         }, {}),
-        par_actif: trades.reduce((acc, t) => {
-          if (!acc[t.asset]) acc[t.asset] = { wins: 0, losses: 0, profit: 0 };
-          if (t.result === 'WIN')  acc[t.asset].wins++;
-          if (t.result === 'LOSS') acc[t.asset].losses++;
-          acc[t.asset].profit += parseFloat(t.profit || 0);
-          return acc;
-        }, {}),
         derniers_trades: trades.slice(0, 10).map(t => ({
           date:     t.date,
           actif:    t.asset,
           type:     t.type,
-          setup:    t.setup    || 'Non spécifié',
+          setup:    t.setup        || 'Non spécifié',
           risque:   t.risk_percent + '%',
           resultat: t.result,
-          profit:   t.profit   + '$',
+          profit:   t.profit       + '$',
           rr:       t.rr_ratio,
         })),
       };
@@ -105,37 +90,36 @@ Réponds UNIQUEMENT avec un JSON valide (sans markdown, sans backticks) avec cet
   "message_motivation": "message court motivant"
 }`;
 
-      const response = await fetch(
-  `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`  ,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: {
-              temperature:     0.7,
-              maxOutputTokens: 1500,
-            }
-          })
-        }
-      );
+      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type':  'application/json',
+          'Authorization': `Bearer ${OPENROUTER_KEY}`,
+          'HTTP-Referer':  'https://tps-frontend-green.vercel.app',
+          'X-Title':       'TPS Trading Coach',
+        },
+        body: JSON.stringify({
+          model: 'google/gemini-2.0-flash-exp:free',
+          messages: [{ role: 'user', content: prompt }],
+          max_tokens: 1500,
+          temperature: 0.7,
+        })
+      });
 
       const data = await response.json();
-      console.log('Réponse Gemini:', data);
+      console.log('Réponse OpenRouter:', data);
 
-      if (data.error) {
-        throw new Error(data.error.message);
-      }
+      if (data.error) throw new Error(data.error.message);
 
-      const text    = data.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (!text) throw new Error('Réponse vide de Gemini');
+      const text = data.choices?.[0]?.message?.content;
+      if (!text) throw new Error('Réponse vide');
 
       const cleaned = text.replace(/```json|```/g, '').trim();
       const parsed  = JSON.parse(cleaned);
       setAnalysis(parsed);
 
     } catch (err) {
-      console.error('Erreur IA complète:', err);
+      console.error('Erreur IA:', err);
       setError('Erreur : ' + err.message);
     } finally {
       setLoading(false);
@@ -154,7 +138,7 @@ Réponds UNIQUEMENT avec un JSON valide (sans markdown, sans backticks) avec cet
       <div style={s.header}>
         <div>
           <h1 style={s.title}>🤖 IA Coach</h1>
-          <p style={s.subtitle}>Analyse personnalisée par Google Gemini AI</p>
+          <p style={s.subtitle}>Analyse personnalisée par IA</p>
         </div>
         <div style={s.badge}>
           <span style={s.badgeText}>{trades?.length || 0} trades</span>
@@ -165,7 +149,7 @@ Réponds UNIQUEMENT avec un JSON valide (sans markdown, sans backticks) avec cet
         <div style={s.analyzeIcon}><Sparkles size={32} color="#9b6dff"/></div>
         <div style={s.analyzeTitle}>Analyse IA de tes performances</div>
         <div style={s.analyzeSubtitle}>
-          Gemini va analyser tes {trades?.length || 0} trades et te donner
+          L'IA va analyser tes {trades?.length || 0} trades et te donner
           un coaching sur tes forces, faiblesses et un plan d'action concret.
         </div>
         <button onClick={analyzeWithAI} disabled={loading}
@@ -190,7 +174,7 @@ Réponds UNIQUEMENT avec un JSON valide (sans markdown, sans backticks) avec cet
             <div style={{...s.dot, animationDelay:'0.2s'}}/>
             <div style={{...s.dot, animationDelay:'0.4s'}}/>
           </div>
-          <div style={s.loadingText}>Gemini analyse tes {trades?.length} trades...</div>
+          <div style={s.loadingText}>Analyse de tes {trades?.length} trades...</div>
           <div style={s.loadingSubtext}>Winrate · Setups · Psychologie · Plan d'action</div>
         </div>
       )}
@@ -215,10 +199,10 @@ Réponds UNIQUEMENT avec un JSON valide (sans markdown, sans backticks) avec cet
           </div>
 
           {[
-            { title:'🏆 Points Forts',           color:'#00d4aa', items: analysis.points_forts,           dot:'green',  symbol:'✓' },
-            { title:'⚠️ Points à Améliorer',      color:'#ef4444', items: analysis.points_ameliorer,       dot:'red',    symbol:'!' },
-            { title:'🧠 Analyse Psychologique',   color:'#9b6dff', items: analysis.analyse_psychologique,  dot:'purple', symbol:'→' },
-            { title:'🎯 Plan d\'Action',          color:'#f59e0b', items: analysis.plan_action,            dot:'orange', numbered: true },
+            { title:'🏆 Points Forts',          color:'#00d4aa', items: analysis.points_forts,          dot:'green',  symbol:'✓' },
+            { title:'⚠️ Points à Améliorer',     color:'#ef4444', items: analysis.points_ameliorer,      dot:'red',    symbol:'!' },
+            { title:'🧠 Analyse Psychologique',  color:'#9b6dff', items: analysis.analyse_psychologique, dot:'purple', symbol:'→' },
+            { title:"🎯 Plan d'Action",          color:'#f59e0b', items: analysis.plan_action,           dot:'orange', numbered: true },
           ].map((section, si) => (
             <div key={si} style={s.section}>
               <div style={s.sectionHeader}>
@@ -264,37 +248,37 @@ function getDotStyle(color) {
 }
 
 const s = {
-  page:          { maxWidth: '800px', margin: '0 auto' },
-  header:        { display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'20px', flexWrap:'wrap', gap:'10px' },
-  title:         { color:'#fff', fontSize:'20px', fontWeight:'700', margin:0 },
-  subtitle:      { color:'#6b7280', fontSize:'13px', marginTop:'4px' },
-  badge:         { background:'#9b6dff22', border:'1px solid #9b6dff44', borderRadius:'8px', padding:'6px 12px' },
-  badgeText:     { color:'#9b6dff', fontSize:'12px', fontWeight:'600' },
-  analyzeCard:   { background:'#111827', border:'1px solid #9b6dff44', borderRadius:'16px', padding:'28px', marginBottom:'20px', display:'flex', flexDirection:'column', alignItems:'center', textAlign:'center', gap:'14px' },
-  analyzeIcon:   { background:'#9b6dff22', borderRadius:'50%', width:'64px', height:'64px', display:'flex', alignItems:'center', justifyContent:'center' },
-  analyzeTitle:  { color:'#fff', fontSize:'16px', fontWeight:'700' },
+  page:           { maxWidth: '800px', margin: '0 auto' },
+  header:         { display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'20px', flexWrap:'wrap', gap:'10px' },
+  title:          { color:'#fff', fontSize:'20px', fontWeight:'700', margin:0 },
+  subtitle:       { color:'#6b7280', fontSize:'13px', marginTop:'4px' },
+  badge:          { background:'#9b6dff22', border:'1px solid #9b6dff44', borderRadius:'8px', padding:'6px 12px' },
+  badgeText:      { color:'#9b6dff', fontSize:'12px', fontWeight:'600' },
+  analyzeCard:    { background:'#111827', border:'1px solid #9b6dff44', borderRadius:'16px', padding:'28px', marginBottom:'20px', display:'flex', flexDirection:'column', alignItems:'center', textAlign:'center', gap:'14px' },
+  analyzeIcon:    { background:'#9b6dff22', borderRadius:'50%', width:'64px', height:'64px', display:'flex', alignItems:'center', justifyContent:'center' },
+  analyzeTitle:   { color:'#fff', fontSize:'16px', fontWeight:'700' },
   analyzeSubtitle:{ color:'#6b7280', fontSize:'13px', lineHeight:'1.6', maxWidth:'400px' },
-  analyzeBtn:    { display:'flex', alignItems:'center', gap:'8px', background:'linear-gradient(135deg,#9b6dff,#00a8ff)', color:'#fff', fontWeight:'700', border:'none', borderRadius:'12px', padding:'14px 28px', cursor:'pointer', fontSize:'15px' },
-  errorBox:      { background:'#ef444411', border:'1px solid #ef444444', borderRadius:'10px', padding:'14px', color:'#ef4444', fontSize:'13px', marginBottom:'16px' },
-  loadingCard:   { background:'#111827', border:'1px solid #1f2937', borderRadius:'12px', padding:'40px', textAlign:'center', marginBottom:'20px' },
-  loadingDots:   { display:'flex', justifyContent:'center', gap:'8px', marginBottom:'16px' },
-  dot:           { width:'12px', height:'12px', background:'#9b6dff', borderRadius:'50%', animation:'bounce 1.4s infinite ease-in-out' },
-  loadingText:   { color:'#fff', fontSize:'15px', fontWeight:'600', marginBottom:'6px' },
-  loadingSubtext:{ color:'#6b7280', fontSize:'12px' },
-  results:       { display:'flex', flexDirection:'column', gap:'14px' },
-  scoreCard:     { background:'#111827', border:'1px solid #1f2937', borderRadius:'12px', padding:'20px', display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(200px, 1fr))', gap:'20px' },
-  scoreLabel:    { color:'#6b7280', fontSize:'12px', marginBottom:'6px' },
-  scoreValue:    { fontSize:'36px', fontWeight:'800', marginBottom:'8px' },
-  scoreBar:      { background:'#1f2937', borderRadius:'99px', height:'8px', overflow:'hidden' },
-  scoreBarFill:  { height:'100%', borderRadius:'99px', transition:'width 1s ease' },
-  motivationBox: { background:'#0f172a', borderRadius:'10px', padding:'14px', display:'flex', gap:'10px', alignItems:'flex-start' },
-  motivationIcon:{ fontSize:'20px', flexShrink:0 },
-  motivationText:{ color:'#d1d5db', fontSize:'13px', fontStyle:'italic', lineHeight:'1.6' },
-  section:       { background:'#111827', border:'1px solid #1f2937', borderRadius:'12px', padding:'18px' },
-  sectionHeader: { display:'flex', alignItems:'center', gap:'8px', marginBottom:'14px' },
-  sectionTitle:  { fontSize:'14px', fontWeight:'700' },
-  sectionContent:{ display:'flex', flexDirection:'column', gap:'10px' },
-  item:          { display:'flex', gap:'10px', alignItems:'flex-start' },
-  itemText:      { color:'#d1d5db', fontSize:'13px', lineHeight:'1.6', flex:1 },
-  reanalyzeBtn:  { display:'flex', alignItems:'center', justifyContent:'center', gap:'8px', background:'#1f2937', border:'1px solid #374151', color:'#9ca3af', borderRadius:'10px', padding:'12px', cursor:'pointer', fontSize:'13px', fontWeight:'600' },
+  analyzeBtn:     { display:'flex', alignItems:'center', gap:'8px', background:'linear-gradient(135deg,#9b6dff,#00a8ff)', color:'#fff', fontWeight:'700', border:'none', borderRadius:'12px', padding:'14px 28px', cursor:'pointer', fontSize:'15px' },
+  errorBox:       { background:'#ef444411', border:'1px solid #ef444444', borderRadius:'10px', padding:'14px', color:'#ef4444', fontSize:'13px', marginBottom:'16px' },
+  loadingCard:    { background:'#111827', border:'1px solid #1f2937', borderRadius:'12px', padding:'40px', textAlign:'center', marginBottom:'20px' },
+  loadingDots:    { display:'flex', justifyContent:'center', gap:'8px', marginBottom:'16px' },
+  dot:            { width:'12px', height:'12px', background:'#9b6dff', borderRadius:'50%', animation:'bounce 1.4s infinite ease-in-out' },
+  loadingText:    { color:'#fff', fontSize:'15px', fontWeight:'600', marginBottom:'6px' },
+  loadingSubtext: { color:'#6b7280', fontSize:'12px' },
+  results:        { display:'flex', flexDirection:'column', gap:'14px' },
+  scoreCard:      { background:'#111827', border:'1px solid #1f2937', borderRadius:'12px', padding:'20px', display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(200px, 1fr))', gap:'20px' },
+  scoreLabel:     { color:'#6b7280', fontSize:'12px', marginBottom:'6px' },
+  scoreValue:     { fontSize:'36px', fontWeight:'800', marginBottom:'8px' },
+  scoreBar:       { background:'#1f2937', borderRadius:'99px', height:'8px', overflow:'hidden' },
+  scoreBarFill:   { height:'100%', borderRadius:'99px', transition:'width 1s ease' },
+  motivationBox:  { background:'#0f172a', borderRadius:'10px', padding:'14px', display:'flex', gap:'10px', alignItems:'flex-start' },
+  motivationIcon: { fontSize:'20px', flexShrink:0 },
+  motivationText: { color:'#d1d5db', fontSize:'13px', fontStyle:'italic', lineHeight:'1.6' },
+  section:        { background:'#111827', border:'1px solid #1f2937', borderRadius:'12px', padding:'18px' },
+  sectionHeader:  { display:'flex', alignItems:'center', gap:'8px', marginBottom:'14px' },
+  sectionTitle:   { fontSize:'14px', fontWeight:'700' },
+  sectionContent: { display:'flex', flexDirection:'column', gap:'10px' },
+  item:           { display:'flex', gap:'10px', alignItems:'flex-start' },
+  itemText:       { color:'#d1d5db', fontSize:'13px', lineHeight:'1.6', flex:1 },
+  reanalyzeBtn:   { display:'flex', alignItems:'center', justifyContent:'center', gap:'8px', background:'#1f2937', border:'1px solid #374151', color:'#9ca3af', borderRadius:'10px', padding:'12px', cursor:'pointer', fontSize:'13px', fontWeight:'600' },
 };
