@@ -351,7 +351,7 @@ export default function Journal() {
                     <td style={s.td}>
                       {trade.screenshot ?(
                         <img
-                          src={trade.screenshot_url}
+                          src={trade.screenshot}
                           alt="screenshot"
                           style={s.thumbnail}
                           onClick={() => setZoomImage(trade.screenshot )}
