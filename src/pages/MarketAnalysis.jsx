@@ -4,6 +4,7 @@ import { TrendingUp, TrendingDown, RefreshCw, AlertTriangle, Clock, Newspaper, C
 const TWELVEDATA_KEY  = import.meta.env.VITE_TWELVEDATA_KEY;
 const FINNHUB_KEY     = import.meta.env.VITE_FINNHUB_KEY;
 const OPENROUTER_KEY  = import.meta.env.VITE_OPENROUTER_KEY;
+const RAPIDAPI_KEY    = import.meta.env.VITE_RAPIDAPI_KEY;
 
 // ── Modèles en cascade ────────────────────────────────────────────────────────
 const MODELS = [
@@ -60,115 +61,116 @@ function EconomicCalendar() {
   const [selectedDay,  setSelectedDay]  = useState('today');
   const [filterImpact, setFilterImpact] = useState('all');
 
-  const fetchCalendarFromAI = async (day) => {
+  const fetchCalendar = async (day) => {
     setLoadingCal(true);
     setErrorCal(null);
     setEvents([]);
 
     try {
-      const today    = new Date();
-      const options  = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+      const today = new Date();
 
-      let dateLabel, fromDate, toDate;
+      // Format jj/mm/aaaa requis par l'API
+      const fmt = (d) => {
+        const dd   = String(d.getDate()).padStart(2, '0');
+        const mm   = String(d.getMonth() + 1).padStart(2, '0');
+        const yyyy = d.getFullYear();
+        return `${dd}/${mm}/${yyyy}`;
+      };
+
+      let fromDate, toDate;
 
       if (day === 'today') {
-        dateLabel = today.toLocaleDateString('fr-FR', options);
-        fromDate  = toDate = today.toISOString().split('T')[0];
+        fromDate = toDate = fmt(today);
       } else if (day === 'tomorrow') {
         const tomorrow = new Date(today);
         tomorrow.setDate(today.getDate() + 1);
-        dateLabel = tomorrow.toLocaleDateString('fr-FR', options);
-        fromDate  = toDate = tomorrow.toISOString().split('T')[0];
+        fromDate = toDate = fmt(tomorrow);
       } else {
         const end = new Date(today);
         end.setDate(today.getDate() + 6);
-        dateLabel = `du ${today.toLocaleDateString('fr-FR')} au ${end.toLocaleDateString('fr-FR')}`;
-        fromDate  = today.toISOString().split('T')[0];
-        toDate    = end.toISOString().split('T')[0];
+        fromDate = fmt(today);
+        toDate   = fmt(end);
       }
 
-      const prompt = `Tu es un expert en calendrier économique forex et matières premières.
+      const url = new URL('https://trader-calendar-api.p.rapidapi.com/calendar');
+      url.searchParams.append('startDate', fromDate);
+      url.searchParams.append('endDate',   toDate);
 
-Donne-moi TOUS les événements économiques importants ${dateLabel} qui peuvent impacter le XAUUSD (or), le dollar américain et les marchés financiers.
+      const r = await fetch(url.toString(), {
+        method: 'GET',
+        headers: {
+          'x-rapidapi-host': 'trader-calendar-api.p.rapidapi.com',
+          'x-rapidapi-key':  RAPIDAPI_KEY,
+        },
+      });
 
-Inclus obligatoirement :
-- Les annonces américaines (Fed, NFP, CPI, PPI, GDP, ISM, Jobless Claims, Retail Sales, etc.)
-- Les décisions de banques centrales (BCE, BoE, BoJ, etc.)
-- Les discours de membres de la Fed (Powell, etc.)
-- Les données d'inflation, emploi, croissance
-- Tout événement à fort impact sur l'or ou le dollar
+      const d = await r.json();
+      console.log('RapidAPI response:', d);
 
-Pour chaque événement, donne des valeurs RÉELLES si tu les connais (valeur précédente, consensus prévu).
+      // Adapter la réponse à notre format — couvre plusieurs structures possibles
+      const raw = Array.isArray(d) ? d : (d.data || d.events || d.calendar || d.result || []);
 
-Réponds UNIQUEMENT avec un JSON valide (sans markdown, sans backticks) :
-[
-  {
-    "date": "${fromDate}",
-    "time": "14:30",
-    "country": "US",
-    "event": "Non-Farm Payrolls (NFP)",
-    "impact": "high",
-    "prev": "175K",
-    "estimate": "180K",
-    "actual": ""
-  }
-]
+      const formatted = raw
+        .map(e => ({
+          date:     e.date       || e.Date       || e.releaseDate || '',
+          time:     e.time       || e.Time       || e.hour        || e.releaseTime || '--:--',
+          country:  e.country    || e.Country    || e.currency    || e.zone        || 'US',
+          event:    e.event      || e.Event      || e.name        || e.title       || e.indicator || '',
+          impact:   ((e.impact   || e.Impact     || e.volatility  || e.importance  || 'low') + '').toLowerCase(),
+          prev:     e.previous   || e.prev       || e.Previous    || e.last        || '',
+          estimate: e.forecast   || e.estimate   || e.Forecast    || e.consensus   || '',
+          actual:   e.actual     || e.Actual     || e.value       || '',
+        }))
+        .filter(e => e.event !== '');
 
-Impact doit être : "high", "medium" ou "low"
-Si pas d'événements majeurs, retourne un tableau avec au moins 3 événements de faible impact.
-Génère entre 5 et 15 événements réalistes pour cette période.`;
-
-      const text = await callOpenRouter(prompt, 2000);
-
-      // Nettoyer et parser le JSON
-      let cleaned = text.replace(/```json|```/g, '').trim();
-
-      // Extraire le tableau JSON si l'IA a ajouté du texte avant/après
-      const match = cleaned.match(/\[[\s\S]*\]/);
-      if (match) cleaned = match[0];
-
-      const parsed = JSON.parse(cleaned);
-
-      if (!Array.isArray(parsed)) throw new Error('Format invalide');
-
-      setEvents(parsed);
+      if (formatted.length === 0) {
+        setEvents([{
+          date:    fromDate,
+          time:    '--:--',
+          country: 'US',
+          event:   'Aucun événement économique pour cette période',
+          impact:  'low',
+          prev: '', estimate: '', actual: '',
+        }]);
+      } else {
+        setEvents(formatted);
+      }
 
     } catch (err) {
-      console.error('Erreur calendrier IA:', err);
-      setErrorCal('Impossible de charger le calendrier. Réessaie dans quelques instants.');
+      console.error('Erreur calendrier:', err);
+      setErrorCal('Impossible de charger le calendrier. Vérifie ta clé RapidAPI dans Vercel.');
     } finally {
       setLoadingCal(false);
     }
   };
 
-  useEffect(() => { fetchCalendarFromAI('today'); }, []);
+  useEffect(() => { fetchCalendar('today'); }, []);
 
-  const handleDay = (day) => {
-    setSelectedDay(day);
-    fetchCalendarFromAI(day);
-  };
+  const handleDay = (day) => { setSelectedDay(day); fetchCalendar(day); };
 
   const impactColor = (impact) => {
     const i = (impact || '').toLowerCase();
-    if (i === 'high')   return '#ef4444';
-    if (i === 'medium') return '#f59e0b';
+    if (i === 'high'   || i === '3' || i === 'red')    return '#ef4444';
+    if (i === 'medium' || i === '2' || i === 'orange') return '#f59e0b';
     return '#6b7280';
   };
 
   const impactLabel = (impact) => {
     const i = (impact || '').toLowerCase();
-    if (i === 'high')   return '🔴 Fort';
-    if (i === 'medium') return '🟡 Moyen';
+    if (i === 'high'   || i === '3' || i === 'red')    return '🔴 Fort';
+    if (i === 'medium' || i === '2' || i === 'orange') return '🟡 Moyen';
     return '⚪ Faible';
   };
 
   const countryFlag = (country) => {
     const flags = {
-      'US':'🇺🇸','EUR':'🇪🇺','EU':'🇪🇺','GB':'🇬🇧',
-      'UK':'🇬🇧','JP':'🇯🇵','CA':'🇨🇦','AU':'🇦🇺',
-      'CH':'🇨🇭','CN':'🇨🇳','DE':'🇩🇪','FR':'🇫🇷',
+      'US':'🇺🇸','USD':'🇺🇸','EUR':'🇪🇺','EU':'🇪🇺',
+      'GB':'🇬🇧','GBP':'🇬🇧','UK':'🇬🇧','JP':'🇯🇵',
+      'JPY':'🇯🇵','CA':'🇨🇦','CAD':'🇨🇦','AU':'🇦🇺',
+      'AUD':'🇦🇺','CH':'🇨🇭','CHF':'🇨🇭','CN':'🇨🇳',
+      'CNY':'🇨🇳','DE':'🇩🇪','FR':'🇫🇷','NZ':'🇳🇿','NZD':'🇳🇿',
     };
-    return flags[country] || '🌍';
+    return flags[country?.toUpperCase()] || '🌍';
   };
 
   const filteredEvents = events.filter(e =>
@@ -176,7 +178,7 @@ Génère entre 5 et 15 événements réalistes pour cette période.`;
   );
 
   const sortedEvents = [...filteredEvents].sort((a, b) => {
-    const order = { high: 0, medium: 1, low: 2 };
+    const order = { high: 0, '3': 0, red: 0, medium: 1, '2': 1, orange: 1, low: 2, '1': 2 };
     const ia    = order[(a.impact || '').toLowerCase()] ?? 3;
     const ib    = order[(b.impact || '').toLowerCase()] ?? 3;
     if (ia !== ib) return ia - ib;
@@ -189,17 +191,17 @@ Génère entre 5 et 15 événements réalistes pour cette période.`;
         <div style={c.headerLeft}>
           <Calendar size={16} color="#f59e0b"/>
           <span style={c.headerTitle}>📅 Annonces Économiques</span>
-          <span style={c.aiTag}>⚡ IA</span>
+          <span style={c.liveTag}>🔗 Live</span>
         </div>
-        <button onClick={() => fetchCalendarFromAI(selectedDay)} style={c.refreshBtn}>
+        <button onClick={() => fetchCalendar(selectedDay)} style={c.refreshBtn}>
           <RefreshCw size={14}/>
         </button>
       </div>
 
       <div style={c.tabsRow}>
         {[
-          { key: 'today',    label: "Aujourd'hui" },
-          { key: 'tomorrow', label: 'Demain'       },
+          { key: 'today',    label: "Aujourd'hui"  },
+          { key: 'tomorrow', label: 'Demain'        },
           { key: 'week',     label: 'Cette semaine' },
         ].map(tab => (
           <button key={tab.key} onClick={() => handleDay(tab.key)} style={{
@@ -235,14 +237,14 @@ Génère entre 5 et 15 événements réalistes pour cette période.`;
       {loadingCal && (
         <div style={c.loading}>
           <RefreshCw size={16} style={{animation:'spin 1s linear infinite', color:'#f59e0b'}}/>
-          <span>L'IA génère le calendrier économique...</span>
+          <span>Chargement des annonces économiques...</span>
         </div>
       )}
 
       {errorCal && (
         <div style={c.error}>
           ⚠️ {errorCal}
-          <button onClick={() => fetchCalendarFromAI(selectedDay)} style={c.retryBtn}>
+          <button onClick={() => fetchCalendar(selectedDay)} style={c.retryBtn}>
             Réessayer
           </button>
         </div>
@@ -257,7 +259,7 @@ Génère entre 5 et 15 événements réalistes pour cette période.`;
           {sortedEvents.map((event, i) => (
             <div key={i} style={{...c.eventRow, borderLeft:`3px solid ${impactColor(event.impact)}`}}>
               <div style={c.eventLeft}>
-                <div style={c.eventTime}>{event.time ? event.time.substring(0,5) : '--:--'}</div>
+                <div style={c.eventTime}>{event.time ? String(event.time).substring(0,5) : '--:--'}</div>
                 <div style={c.eventCountry}>{countryFlag(event.country)} {event.country || ''}</div>
               </div>
               <div style={c.eventCenter}>
@@ -283,7 +285,7 @@ Génère entre 5 et 15 événements réalistes pour cette période.`;
         <span style={c.legendItem}><span style={{color:'#9ca3af'}}>A</span> = Actuel</span>
         <span style={c.legendItem}><span style={{color:'#9ca3af'}}>P</span> = Prévu</span>
         <span style={c.legendItem}><span style={{color:'#9ca3af'}}>Pr</span> = Précédent</span>
-        <span style={{...c.legendItem, marginLeft:'auto', color:'#f59e0b'}}>⚡ Généré par IA</span>
+        <span style={{...c.legendItem, marginLeft:'auto', color:'#00a8ff'}}>🔗 RapidAPI Live</span>
       </div>
     </div>
   );
@@ -295,6 +297,7 @@ const c = {
   headerLeft:    { display:'flex', alignItems:'center', gap:'8px' },
   headerTitle:   { color:'#fff', fontSize:'14px', fontWeight:'600' },
   refreshBtn:    { background:'#1f2937', border:'1px solid #374151', borderRadius:'6px', color:'#6b7280', padding:'6px', cursor:'pointer', display:'flex' },
+  liveTag:       { background:'#00a8ff22', color:'#00a8ff', fontSize:'10px', fontWeight:'700', padding:'2px 6px', borderRadius:'4px' },
   tabsRow:       { display:'flex', gap:'8px', marginBottom:'10px', flexWrap:'wrap' },
   tab:           { padding:'6px 14px', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'600' },
   filtersRow:    { display:'flex', alignItems:'center', gap:'6px', marginBottom:'12px', flexWrap:'wrap' },
@@ -303,6 +306,7 @@ const c = {
   eventCount:    { marginLeft:'auto', color:'#6b7280', fontSize:'11px' },
   loading:       { display:'flex', alignItems:'center', gap:'8px', color:'#9ca3af', fontSize:'13px', padding:'20px', justifyContent:'center' },
   error:         { color:'#ef4444', fontSize:'13px', padding:'12px', background:'#ef444411', borderRadius:'8px' },
+  retryBtn:      { background:'none', border:'1px solid #ef4444', color:'#ef4444', borderRadius:'6px', padding:'4px 10px', cursor:'pointer', fontSize:'11px', marginTop:'8px', display:'block' },
   empty:         { color:'#6b7280', fontSize:'13px', padding:'20px', textAlign:'center' },
   eventsList:    { display:'flex', flexDirection:'column', gap:'8px', maxHeight:'400px', overflowY:'auto' },
   eventRow:      { display:'flex', alignItems:'center', gap:'12px', background:'#0f172a', borderRadius:'8px', padding:'10px 12px', flexWrap:'wrap' },
@@ -384,13 +388,37 @@ export default function MarketAnalysis() {
 
       let events = [];
       try {
-        const today = new Date().toISOString().split('T')[0];
-        const r = await fetch(`https://finnhub.io/api/v1/calendar/economic?from=${today}&to=${today}&token=${FINNHUB_KEY}`);
-        const d = await r.json();
-        events = (d.economicCalendar || [])
-          .filter(e => ['high','medium'].includes(e.impact?.toLowerCase()))
+        const today = new Date();
+        const dd    = String(today.getDate()).padStart(2,'0');
+        const mm    = String(today.getMonth()+1).padStart(2,'0');
+        const yyyy  = today.getFullYear();
+        const todayFmt = `${dd}/${mm}/${yyyy}`;
+
+        const url = new URL('https://trader-calendar-api.p.rapidapi.com/calendar');
+        url.searchParams.append('startDate', todayFmt);
+        url.searchParams.append('endDate',   todayFmt);
+
+        const r = await fetch(url.toString(), {
+          method: 'GET',
+          headers: {
+            'x-rapidapi-host': 'trader-calendar-api.p.rapidapi.com',
+            'x-rapidapi-key':  RAPIDAPI_KEY,
+          },
+        });
+        const d   = await r.json();
+        const raw = Array.isArray(d) ? d : (d.data || d.events || d.calendar || d.result || []);
+        events = raw
+          .filter(e => {
+            const imp = ((e.impact || e.Impact || e.volatility || e.importance || '') + '').toLowerCase();
+            return ['high','medium','3','2','red','orange'].includes(imp);
+          })
           .slice(0, 5)
-          .map(e => `${e.time || ''} — ${e.event} (Impact: ${e.impact})`);
+          .map(e => {
+            const name = e.event || e.Event || e.name || e.title || e.indicator || '';
+            const time = e.time  || e.Time  || e.hour || e.releaseTime || '';
+            const imp  = ((e.impact || e.Impact || e.volatility || 'medium') + '');
+            return `${time} — ${name} (Impact: ${imp})`;
+          });
       } catch {}
 
       const month      = new Date().getMonth() + 1;
