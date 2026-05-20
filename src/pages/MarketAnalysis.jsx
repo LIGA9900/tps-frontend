@@ -60,39 +60,93 @@ function EconomicCalendar() {
   const [selectedDay,  setSelectedDay]  = useState('today');
   const [filterImpact, setFilterImpact] = useState('all');
 
-  const fetchCalendar = async (day) => {
+  const fetchCalendarFromAI = async (day) => {
     setLoadingCal(true);
     setErrorCal(null);
+    setEvents([]);
+
     try {
-      const today = new Date();
-      let from, to;
+      const today    = new Date();
+      const options  = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+
+      let dateLabel, fromDate, toDate;
+
       if (day === 'today') {
-        from = to = today.toISOString().split('T')[0];
+        dateLabel = today.toLocaleDateString('fr-FR', options);
+        fromDate  = toDate = today.toISOString().split('T')[0];
       } else if (day === 'tomorrow') {
         const tomorrow = new Date(today);
         tomorrow.setDate(today.getDate() + 1);
-        from = to = tomorrow.toISOString().split('T')[0];
-      } else if (day === 'week') {
-        from = today.toISOString().split('T')[0];
+        dateLabel = tomorrow.toLocaleDateString('fr-FR', options);
+        fromDate  = toDate = tomorrow.toISOString().split('T')[0];
+      } else {
         const end = new Date(today);
         end.setDate(today.getDate() + 6);
-        to = end.toISOString().split('T')[0];
+        dateLabel = `du ${today.toLocaleDateString('fr-FR')} au ${end.toLocaleDateString('fr-FR')}`;
+        fromDate  = today.toISOString().split('T')[0];
+        toDate    = end.toISOString().split('T')[0];
       }
-      const r = await fetch(
-        `https://finnhub.io/api/v1/calendar/economic?from=${from}&to=${to}&token=${FINNHUB_KEY}`
-      );
-      const d = await r.json();
-      setEvents(d.economicCalendar || []);
-    } catch {
-      setErrorCal('Impossible de charger le calendrier. Vérifie ta clé FinnHub.');
+
+      const prompt = `Tu es un expert en calendrier économique forex et matières premières.
+
+Donne-moi TOUS les événements économiques importants ${dateLabel} qui peuvent impacter le XAUUSD (or), le dollar américain et les marchés financiers.
+
+Inclus obligatoirement :
+- Les annonces américaines (Fed, NFP, CPI, PPI, GDP, ISM, Jobless Claims, Retail Sales, etc.)
+- Les décisions de banques centrales (BCE, BoE, BoJ, etc.)
+- Les discours de membres de la Fed (Powell, etc.)
+- Les données d'inflation, emploi, croissance
+- Tout événement à fort impact sur l'or ou le dollar
+
+Pour chaque événement, donne des valeurs RÉELLES si tu les connais (valeur précédente, consensus prévu).
+
+Réponds UNIQUEMENT avec un JSON valide (sans markdown, sans backticks) :
+[
+  {
+    "date": "${fromDate}",
+    "time": "14:30",
+    "country": "US",
+    "event": "Non-Farm Payrolls (NFP)",
+    "impact": "high",
+    "prev": "175K",
+    "estimate": "180K",
+    "actual": ""
+  }
+]
+
+Impact doit être : "high", "medium" ou "low"
+Si pas d'événements majeurs, retourne un tableau avec au moins 3 événements de faible impact.
+Génère entre 5 et 15 événements réalistes pour cette période.`;
+
+      const text = await callOpenRouter(prompt, 2000);
+
+      // Nettoyer et parser le JSON
+      let cleaned = text.replace(/```json|```/g, '').trim();
+
+      // Extraire le tableau JSON si l'IA a ajouté du texte avant/après
+      const match = cleaned.match(/\[[\s\S]*\]/);
+      if (match) cleaned = match[0];
+
+      const parsed = JSON.parse(cleaned);
+
+      if (!Array.isArray(parsed)) throw new Error('Format invalide');
+
+      setEvents(parsed);
+
+    } catch (err) {
+      console.error('Erreur calendrier IA:', err);
+      setErrorCal('Impossible de charger le calendrier. Réessaie dans quelques instants.');
     } finally {
       setLoadingCal(false);
     }
   };
 
-  useEffect(() => { fetchCalendar('today'); }, []);
+  useEffect(() => { fetchCalendarFromAI('today'); }, []);
 
-  const handleDay = (day) => { setSelectedDay(day); fetchCalendar(day); };
+  const handleDay = (day) => {
+    setSelectedDay(day);
+    fetchCalendarFromAI(day);
+  };
 
   const impactColor = (impact) => {
     const i = (impact || '').toLowerCase();
@@ -123,8 +177,8 @@ function EconomicCalendar() {
 
   const sortedEvents = [...filteredEvents].sort((a, b) => {
     const order = { high: 0, medium: 1, low: 2 };
-    const ia = order[(a.impact || '').toLowerCase()] ?? 3;
-    const ib = order[(b.impact || '').toLowerCase()] ?? 3;
+    const ia    = order[(a.impact || '').toLowerCase()] ?? 3;
+    const ib    = order[(b.impact || '').toLowerCase()] ?? 3;
     if (ia !== ib) return ia - ib;
     return (a.time || '').localeCompare(b.time || '');
   });
@@ -135,8 +189,9 @@ function EconomicCalendar() {
         <div style={c.headerLeft}>
           <Calendar size={16} color="#f59e0b"/>
           <span style={c.headerTitle}>📅 Annonces Économiques</span>
+          <span style={c.aiTag}>⚡ IA</span>
         </div>
-        <button onClick={() => fetchCalendar(selectedDay)} style={c.refreshBtn}>
+        <button onClick={() => fetchCalendarFromAI(selectedDay)} style={c.refreshBtn}>
           <RefreshCw size={14}/>
         </button>
       </div>
@@ -180,11 +235,18 @@ function EconomicCalendar() {
       {loadingCal && (
         <div style={c.loading}>
           <RefreshCw size={16} style={{animation:'spin 1s linear infinite', color:'#f59e0b'}}/>
-          <span>Chargement des annonces...</span>
+          <span>L'IA génère le calendrier économique...</span>
         </div>
       )}
 
-      {errorCal && <div style={c.error}>⚠️ {errorCal}</div>}
+      {errorCal && (
+        <div style={c.error}>
+          ⚠️ {errorCal}
+          <button onClick={() => fetchCalendarFromAI(selectedDay)} style={c.retryBtn}>
+            Réessayer
+          </button>
+        </div>
+      )}
 
       {!loadingCal && !errorCal && sortedEvents.length === 0 && (
         <div style={c.empty}>✅ Aucune annonce économique pour cette période</div>
@@ -221,6 +283,7 @@ function EconomicCalendar() {
         <span style={c.legendItem}><span style={{color:'#9ca3af'}}>A</span> = Actuel</span>
         <span style={c.legendItem}><span style={{color:'#9ca3af'}}>P</span> = Prévu</span>
         <span style={c.legendItem}><span style={{color:'#9ca3af'}}>Pr</span> = Précédent</span>
+        <span style={{...c.legendItem, marginLeft:'auto', color:'#f59e0b'}}>⚡ Généré par IA</span>
       </div>
     </div>
   );
