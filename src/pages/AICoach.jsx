@@ -3,16 +3,75 @@ import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
 import { Brain, RefreshCw, Sparkles } from 'lucide-react';
 
+const OPENROUTER_KEY = import.meta.env.VITE_OPENROUTER_KEY;
+
+// ── Modèles en cascade (si le 1er échoue → 2ème → 3ème) ──────────────────────
+const MODELS = [
+  'deepseek/deepseek-v4-flash:free',
+  'qwen/qwen3-8b:free',
+  'meta-llama/llama-3.3-70b-instruct:free',
+];
+
+async function callOpenRouter(prompt, maxTokens = 1500) {
+  let lastError = null;
+
+  for (const model of MODELS) {
+    try {
+      console.log(`Essai avec le modèle : ${model}`);
+      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type':  'application/json',
+          'Authorization': `Bearer ${OPENROUTER_KEY}`,
+          'HTTP-Referer':  'https://tps-frontend-green.vercel.app',
+          'X-Title':       'TPS Trading Coach',
+        },
+        body: JSON.stringify({
+          model,
+          messages:    [{ role: 'user', content: prompt }],
+          max_tokens:  maxTokens,
+          temperature: 0.7,
+        })
+      });
+
+      const data = await response.json();
+
+      // Si erreur provider → essai suivant
+      if (data.error) {
+        console.warn(`Modèle ${model} a échoué :`, data.error.message);
+        lastError = new Error(data.error.message);
+        continue;
+      }
+
+      const text = data.choices?.[0]?.message?.content;
+      if (!text) {
+        lastError = new Error('Réponse vide');
+        continue;
+      }
+
+      console.log(`✅ Succès avec : ${model}`);
+      return text;
+
+    } catch (err) {
+      console.warn(`Modèle ${model} a échoué :`, err.message);
+      lastError = err;
+      continue;
+    }
+  }
+
+  throw lastError || new Error('Tous les modèles ont échoué');
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 export default function AICoach() {
   const { user }                       = useAuth();
   const { dashboard, trades, refresh } = useData();
   const [analysis, setAnalysis]        = useState(null);
-  const [loading, setLoading]          = useState(false);
-  const [error, setError]              = useState(null);
+  const [loading,  setLoading]         = useState(false);
+  const [error,    setError]           = useState(null);
+  const [currentModel, setCurrentModel] = useState(null);
 
   useEffect(() => { refresh(); }, []);
-
-  const OPENROUTER_KEY = import.meta.env.VITE_OPENROUTER_KEY;
 
   const stats  = dashboard?.stats  || {};
   const growth = dashboard?.growth || {};
@@ -30,6 +89,7 @@ export default function AICoach() {
     setLoading(true);
     setError(null);
     setAnalysis(null);
+    setCurrentModel('Recherche du meilleur modèle disponible...');
 
     try {
       const tradingData = {
@@ -51,8 +111,8 @@ export default function AICoach() {
         },
         progression: {
           phase:       growth.phase,
-          risque:      (growth.risk_percent    || 0) + '%',
-          objectif:    (growth.next_target     || 0) + '$',
+          risque:      (growth.risk_percent     || 0) + '%',
+          objectif:    (growth.next_target      || 0) + '$',
           progression: (growth.progress_percent || 0) + '%',
         },
         par_setup: trades.reduce((acc, t) => {
@@ -75,52 +135,37 @@ export default function AICoach() {
         })),
       };
 
-      const prompt = `Tu es un coach de trading professionnel. Analyse ces données de trading et donne un coaching personnalisé en français.
+      const prompt = `Tu es un coach de trading professionnel expert. Analyse ces données de trading et donne un coaching personnalisé, précis et actionnable en français.
 
 DONNÉES DU TRADER :
 ${JSON.stringify(tradingData, null, 2)}
 
-Réponds UNIQUEMENT avec un JSON valide (sans markdown, sans backticks) avec cette structure exacte :
+INSTRUCTIONS :
+- Sois très précis et concret dans tes observations
+- Base-toi UNIQUEMENT sur les données fournies
+- Donne des conseils actionnables et spécifiques
+- Le score doit refléter objectivement les performances
+
+Réponds UNIQUEMENT avec un JSON valide (sans markdown, sans backticks) :
 {
-  "points_forts": ["point 1", "point 2", "point 3"],
-  "points_ameliorer": ["point 1", "point 2", "point 3"],
-  "analyse_psychologique": ["observation 1", "observation 2"],
+  "points_forts": ["point précis 1", "point précis 2", "point précis 3"],
+  "points_ameliorer": ["point précis 1", "point précis 2", "point précis 3"],
+  "analyse_psychologique": ["observation précise 1", "observation précise 2"],
   "plan_action": ["action concrète 1", "action concrète 2", "action concrète 3"],
   "score_global": 75,
-  "message_motivation": "message court motivant"
+  "message_motivation": "message court et personnalisé"
 }`;
 
-      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type':  'application/json',
-          'Authorization': `Bearer ${OPENROUTER_KEY}`,
-          'HTTP-Referer':  'https://tps-frontend-green.vercel.app',
-          'X-Title':       'TPS Trading Coach',
-        },
-        body: JSON.stringify({
-          model: 'deepseek/deepseek-v4-flash:free',
-          messages: [{ role: 'user', content: prompt }],
-          max_tokens: 1500,
-          temperature: 0.7,
-        })
-      });
-
-      const data = await response.json();
-      console.log('Réponse OpenRouter:', data);
-
-      if (data.error) throw new Error(data.error.message);
-
-      const text = data.choices?.[0]?.message?.content;
-      if (!text) throw new Error('Réponse vide');
-
+      const text    = await callOpenRouter(prompt, 1500);
       const cleaned = text.replace(/```json|```/g, '').trim();
       const parsed  = JSON.parse(cleaned);
       setAnalysis(parsed);
+      setCurrentModel(null);
 
     } catch (err) {
       console.error('Erreur IA:', err);
-      setError('Erreur : ' + err.message);
+      setError('Tous les modèles IA sont temporairement indisponibles. Réessaie dans quelques minutes.');
+      setCurrentModel(null);
     } finally {
       setLoading(false);
     }
@@ -175,6 +220,9 @@ Réponds UNIQUEMENT avec un JSON valide (sans markdown, sans backticks) avec cet
             <div style={{...s.dot, animationDelay:'0.4s'}}/>
           </div>
           <div style={s.loadingText}>Analyse de tes {trades?.length} trades...</div>
+          {currentModel && (
+            <div style={s.modelInfo}>{currentModel}</div>
+          )}
           <div style={s.loadingSubtext}>Winrate · Setups · Psychologie · Plan d'action</div>
         </div>
       )}
@@ -199,10 +247,10 @@ Réponds UNIQUEMENT avec un JSON valide (sans markdown, sans backticks) avec cet
           </div>
 
           {[
-            { title:'🏆 Points Forts',          color:'#00d4aa', items: analysis.points_forts,          dot:'green',  symbol:'✓' },
-            { title:'⚠️ Points à Améliorer',     color:'#ef4444', items: analysis.points_ameliorer,      dot:'red',    symbol:'!' },
-            { title:'🧠 Analyse Psychologique',  color:'#9b6dff', items: analysis.analyse_psychologique, dot:'purple', symbol:'→' },
-            { title:"🎯 Plan d'Action",          color:'#f59e0b', items: analysis.plan_action,           dot:'orange', numbered: true },
+            { title:'🏆 Points Forts',         color:'#00d4aa', items: analysis.points_forts,          dot:'green',  symbol:'✓'  },
+            { title:'⚠️ Points à Améliorer',    color:'#ef4444', items: analysis.points_ameliorer,      dot:'red',    symbol:'!'  },
+            { title:'🧠 Analyse Psychologique', color:'#9b6dff', items: analysis.analyse_psychologique, dot:'purple', symbol:'→'  },
+            { title:"🎯 Plan d'Action",         color:'#f59e0b', items: analysis.plan_action,           dot:'orange', numbered: true },
           ].map((section, si) => (
             <div key={si} style={s.section}>
               <div style={s.sectionHeader}>
@@ -264,6 +312,7 @@ const s = {
   loadingDots:    { display:'flex', justifyContent:'center', gap:'8px', marginBottom:'16px' },
   dot:            { width:'12px', height:'12px', background:'#9b6dff', borderRadius:'50%', animation:'bounce 1.4s infinite ease-in-out' },
   loadingText:    { color:'#fff', fontSize:'15px', fontWeight:'600', marginBottom:'6px' },
+  modelInfo:      { color:'#6b7280', fontSize:'11px', marginBottom:'4px', fontStyle:'italic' },
   loadingSubtext: { color:'#6b7280', fontSize:'12px' },
   results:        { display:'flex', flexDirection:'column', gap:'14px' },
   scoreCard:      { background:'#111827', border:'1px solid #1f2937', borderRadius:'12px', padding:'20px', display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(200px, 1fr))', gap:'20px' },

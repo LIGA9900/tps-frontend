@@ -5,7 +5,54 @@ const TWELVEDATA_KEY  = import.meta.env.VITE_TWELVEDATA_KEY;
 const FINNHUB_KEY     = import.meta.env.VITE_FINNHUB_KEY;
 const OPENROUTER_KEY  = import.meta.env.VITE_OPENROUTER_KEY;
 
-// ── Calendrier économique autonome ────────────────────────────────────────────
+// ── Modèles en cascade ────────────────────────────────────────────────────────
+const MODELS = [
+  'deepseek/deepseek-v4-flash:free',
+  'qwen/qwen3-8b:free',
+  'meta-llama/llama-3.3-70b-instruct:free',
+];
+
+async function callOpenRouter(prompt, maxTokens = 2000) {
+  let lastError = null;
+  for (const model of MODELS) {
+    try {
+      console.log(`Essai avec : ${model}`);
+      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type':  'application/json',
+          'Authorization': `Bearer ${OPENROUTER_KEY}`,
+          'HTTP-Referer':  'https://tps-frontend-green.vercel.app',
+          'X-Title':       'TPS Market Analysis',
+        },
+        body: JSON.stringify({
+          model,
+          messages:    [{ role: 'user', content: prompt }],
+          max_tokens:  maxTokens,
+          temperature: 0.3,
+        })
+      });
+      const data = await response.json();
+      if (data.error) {
+        console.warn(`${model} échoué :`, data.error.message);
+        lastError = new Error(data.error.message);
+        continue;
+      }
+      const text = data.choices?.[0]?.message?.content;
+      if (!text) { lastError = new Error('Réponse vide'); continue; }
+      console.log(`✅ Succès avec : ${model}`);
+      return text;
+    } catch (err) {
+      console.warn(`${model} échoué :`, err.message);
+      lastError = err;
+      continue;
+    }
+  }
+  throw lastError || new Error('Tous les modèles ont échoué');
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── Calendrier économique ─────────────────────────────────────────────────────
 function EconomicCalendar() {
   const [events,       setEvents]       = useState([]);
   const [loadingCal,   setLoadingCal]   = useState(false);
@@ -19,7 +66,6 @@ function EconomicCalendar() {
     try {
       const today = new Date();
       let from, to;
-
       if (day === 'today') {
         from = to = today.toISOString().split('T')[0];
       } else if (day === 'tomorrow') {
@@ -32,14 +78,13 @@ function EconomicCalendar() {
         end.setDate(today.getDate() + 6);
         to = end.toISOString().split('T')[0];
       }
-
       const r = await fetch(
         `https://finnhub.io/api/v1/calendar/economic?from=${from}&to=${to}&token=${FINNHUB_KEY}`
       );
       const d = await r.json();
       setEvents(d.economicCalendar || []);
     } catch {
-      setErrorCal('Impossible de charger le calendrier');
+      setErrorCal('Impossible de charger le calendrier. Vérifie ta clé FinnHub.');
     } finally {
       setLoadingCal(false);
     }
@@ -47,10 +92,7 @@ function EconomicCalendar() {
 
   useEffect(() => { fetchCalendar('today'); }, []);
 
-  const handleDay = (day) => {
-    setSelectedDay(day);
-    fetchCalendar(day);
-  };
+  const handleDay = (day) => { setSelectedDay(day); fetchCalendar(day); };
 
   const impactColor = (impact) => {
     const i = (impact || '').toLowerCase();
@@ -68,20 +110,17 @@ function EconomicCalendar() {
 
   const countryFlag = (country) => {
     const flags = {
-      'US': '🇺🇸', 'EUR': '🇪🇺', 'EU': '🇪🇺',
-      'GB': '🇬🇧', 'UK': '🇬🇧', 'JP': '🇯🇵',
-      'CA': '🇨🇦', 'AU': '🇦🇺', 'CH': '🇨🇭',
-      'CN': '🇨🇳', 'DE': '🇩🇪', 'FR': '🇫🇷',
+      'US':'🇺🇸','EUR':'🇪🇺','EU':'🇪🇺','GB':'🇬🇧',
+      'UK':'🇬🇧','JP':'🇯🇵','CA':'🇨🇦','AU':'🇦🇺',
+      'CH':'🇨🇭','CN':'🇨🇳','DE':'🇩🇪','FR':'🇫🇷',
     };
     return flags[country] || '🌍';
   };
 
-  const filteredEvents = events.filter(e => {
-    if (filterImpact === 'all') return true;
-    return (e.impact || '').toLowerCase() === filterImpact;
-  });
+  const filteredEvents = events.filter(e =>
+    filterImpact === 'all' || (e.impact || '').toLowerCase() === filterImpact
+  );
 
-  // Trier par impact (high d'abord) puis par heure
   const sortedEvents = [...filteredEvents].sort((a, b) => {
     const order = { high: 0, medium: 1, low: 2 };
     const ia = order[(a.impact || '').toLowerCase()] ?? 3;
@@ -92,8 +131,6 @@ function EconomicCalendar() {
 
   return (
     <div style={c.card}>
-
-      {/* Header */}
       <div style={c.header}>
         <div style={c.headerLeft}>
           <Calendar size={16} color="#f59e0b"/>
@@ -104,104 +141,75 @@ function EconomicCalendar() {
         </button>
       </div>
 
-      {/* Filtres jours */}
       <div style={c.tabsRow}>
         {[
           { key: 'today',    label: "Aujourd'hui" },
           { key: 'tomorrow', label: 'Demain'       },
           { key: 'week',     label: 'Cette semaine' },
         ].map(tab => (
-          <button key={tab.key}
-            onClick={() => handleDay(tab.key)}
-            style={{
-              ...c.tab,
-              background:  selectedDay === tab.key ? '#f59e0b22' : '#1f2937',
-              color:       selectedDay === tab.key ? '#f59e0b'   : '#6b7280',
-              border:      `1px solid ${selectedDay === tab.key ? '#f59e0b44' : '#374151'}`,
-            }}>
+          <button key={tab.key} onClick={() => handleDay(tab.key)} style={{
+            ...c.tab,
+            background: selectedDay === tab.key ? '#f59e0b22' : '#1f2937',
+            color:      selectedDay === tab.key ? '#f59e0b'   : '#6b7280',
+            border:     `1px solid ${selectedDay === tab.key ? '#f59e0b44' : '#374151'}`,
+          }}>
             {tab.label}
           </button>
         ))}
       </div>
 
-      {/* Filtres impact */}
       <div style={c.filtersRow}>
         <span style={c.filterLabel}>Impact :</span>
         {[
-          { key: 'all',    label: 'Tous'  },
-          { key: 'high',   label: '🔴 Fort'  },
-          { key: 'medium', label: '🟡 Moyen' },
+          { key: 'all',    label: 'Tous'      },
+          { key: 'high',   label: '🔴 Fort'   },
+          { key: 'medium', label: '🟡 Moyen'  },
           { key: 'low',    label: '⚪ Faible' },
         ].map(f => (
-          <button key={f.key}
-            onClick={() => setFilterImpact(f.key)}
-            style={{
-              ...c.filterBtn,
-              background: filterImpact === f.key ? '#ffffff11' : 'transparent',
-              color:      filterImpact === f.key ? '#fff'      : '#6b7280',
-            }}>
+          <button key={f.key} onClick={() => setFilterImpact(f.key)} style={{
+            ...c.filterBtn,
+            background: filterImpact === f.key ? '#ffffff11' : 'transparent',
+            color:      filterImpact === f.key ? '#fff'      : '#6b7280',
+          }}>
             {f.label}
           </button>
         ))}
         <span style={c.eventCount}>{sortedEvents.length} événements</span>
       </div>
 
-      {/* Contenu */}
       {loadingCal && (
         <div style={c.loading}>
-          <RefreshCw size={16} style={{ animation:'spin 1s linear infinite', color:'#f59e0b' }}/>
+          <RefreshCw size={16} style={{animation:'spin 1s linear infinite', color:'#f59e0b'}}/>
           <span>Chargement des annonces...</span>
         </div>
       )}
 
-      {errorCal && (
-        <div style={c.error}>⚠️ {errorCal}</div>
-      )}
+      {errorCal && <div style={c.error}>⚠️ {errorCal}</div>}
 
       {!loadingCal && !errorCal && sortedEvents.length === 0 && (
-        <div style={c.empty}>
-          ✅ Aucune annonce économique pour cette période
-        </div>
+        <div style={c.empty}>✅ Aucune annonce économique pour cette période</div>
       )}
 
       {!loadingCal && sortedEvents.length > 0 && (
         <div style={c.eventsList}>
           {sortedEvents.map((event, i) => (
-            <div key={i} style={{
-              ...c.eventRow,
-              borderLeft: `3px solid ${impactColor(event.impact)}`,
-            }}>
-              {/* Heure + pays */}
+            <div key={i} style={{...c.eventRow, borderLeft:`3px solid ${impactColor(event.impact)}`}}>
               <div style={c.eventLeft}>
-                <div style={c.eventTime}>
-                  {event.time ? event.time.substring(0,5) : '--:--'}
-                </div>
-                <div style={c.eventCountry}>
-                  {countryFlag(event.country)} {event.country || ''}
-                </div>
+                <div style={c.eventTime}>{event.time ? event.time.substring(0,5) : '--:--'}</div>
+                <div style={c.eventCountry}>{countryFlag(event.country)} {event.country || ''}</div>
               </div>
-
-              {/* Nom événement */}
               <div style={c.eventCenter}>
                 <div style={c.eventName}>{event.event}</div>
                 <div style={c.eventDate}>{event.date}</div>
               </div>
-
-              {/* Valeurs */}
               <div style={c.eventRight}>
-                <div style={{...c.impactTag, background: impactColor(event.impact) + '22', color: impactColor(event.impact)}}>
+                <div style={{...c.impactTag, background: impactColor(event.impact)+'22', color: impactColor(event.impact)}}>
                   {impactLabel(event.impact)}
                 </div>
                 <div style={c.eventValues}>
-                  {event.actual !== undefined && event.actual !== null && event.actual !== '' && (
-                    <span style={c.actualValue}>A: {event.actual}</span>
-                  )}
-                  {event.estimate !== undefined && event.estimate !== null && event.estimate !== '' && (
-                    <span style={c.estimateValue}>P: {event.estimate}</span>
-                  )}
-                  {event.prev !== undefined && event.prev !== null && event.prev !== '' && (
-                    <span style={c.prevValue}>Pr: {event.prev}</span>
-                  )}
+                  {event.actual   != null && event.actual   !== '' && <span style={c.actualValue}>A: {event.actual}</span>}
+                  {event.estimate != null && event.estimate !== '' && <span style={c.estimateValue}>P: {event.estimate}</span>}
+                  {event.prev     != null && event.prev     !== '' && <span style={c.prevValue}>Pr: {event.prev}</span>}
                 </div>
               </div>
             </div>
@@ -209,13 +217,11 @@ function EconomicCalendar() {
         </div>
       )}
 
-      {/* Légende */}
       <div style={c.legend}>
         <span style={c.legendItem}><span style={{color:'#9ca3af'}}>A</span> = Actuel</span>
         <span style={c.legendItem}><span style={{color:'#9ca3af'}}>P</span> = Prévu</span>
         <span style={c.legendItem}><span style={{color:'#9ca3af'}}>Pr</span> = Précédent</span>
       </div>
-
     </div>
   );
 }
@@ -255,15 +261,17 @@ const c = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function MarketAnalysis() {
-  const [analysis, setAnalysis] = useState(null);
-  const [loading,  setLoading]  = useState(false);
-  const [error,    setError]    = useState(null);
-  const [rawData,  setRawData]  = useState(null);
+  const [analysis,     setAnalysis]     = useState(null);
+  const [loading,      setLoading]      = useState(false);
+  const [error,        setError]        = useState(null);
+  const [rawData,      setRawData]      = useState(null);
+  const [currentModel, setCurrentModel] = useState(null);
 
   const fetchAllData = async () => {
     setLoading(true);
     setError(null);
     setAnalysis(null);
+    setCurrentModel('Recherche du meilleur modèle disponible...');
 
     try {
       let xauusd = { price: 'N/A', change: 'N/A', change_percent: 'N/A' };
@@ -292,8 +300,8 @@ export default function MarketAnalysis() {
         const r = await fetch('https://api.alternative.me/fng/?limit=1');
         const d = await r.json();
         fearGreed = {
-          value: d.data?.[0]?.value                  || 'N/A',
-          label: d.data?.[0]?.value_classification   || 'N/A',
+          value: d.data?.[0]?.value                || 'N/A',
+          label: d.data?.[0]?.value_classification || 'N/A',
         };
       } catch {}
 
@@ -322,7 +330,7 @@ export default function MarketAnalysis() {
           .map(e => `${e.time || ''} — ${e.event} (Impact: ${e.impact})`);
       } catch {}
 
-      const month = new Date().getMonth() + 1;
+      const month      = new Date().getMonth() + 1;
       const goodMonths = [1, 8, 9, 11, 12];
       const seasonality = goodMonths.includes(month)
         ? "Favorable (mois historiquement haussier pour l'or)"
@@ -336,8 +344,8 @@ export default function MarketAnalysis() {
 
       const collected = {
         xauusd, dxy, fear_greed: fearGreed,
-        news:    news.length   > 0 ? news   : ["Aucune news filtrée disponible"],
-        events:  events.length > 0 ? events : ["Aucun événement majeur aujourd'hui"],
+        news:   news.length   > 0 ? news   : ["Aucune news filtrée disponible"],
+        events: events.length > 0 ? events : ["Aucun événement majeur aujourd'hui"],
         seasonality, session,
         date: new Date().toLocaleDateString('fr-FR', {
           weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
@@ -347,22 +355,27 @@ export default function MarketAnalysis() {
       setRawData(collected);
 
       const prompt = `Tu es un analyste financier expert spécialisé sur le XAUUSD (Or/Dollar).
-Analyse ces données de marché en temps réel et donne une analyse fondamentale complète en français.
+Analyse ces données de marché en temps réel et donne une analyse fondamentale complète et précise en français.
 
 DONNÉES DU MARCHÉ (${collected.date}) :
 
 📈 XAUUSD :
 - Prix actuel : ${collected.xauusd.price}$
-- Variation : ${collected.xauusd.change}$ (${collected.xauusd.change_percent}%)
+- Variation du jour : ${collected.xauusd.change}$ (${collected.xauusd.change_percent}%)
 
 💵 DXY (Dollar Index) :
 - Valeur : ${collected.dxy.price}
 - Variation : ${collected.dxy.change_percent}%
-- Note : DXY et or ont une corrélation INVERSE
+- Rappel : corrélation INVERSE avec l'or (DXY monte = or baisse)
 
 😨 Fear & Greed Index : ${collected.fear_greed.value}/100 (${collected.fear_greed.label})
+- 0-25 = Extreme Fear → or refuge très demandé
+- 25-45 = Fear → légèrement favorable à l'or
+- 45-55 = Neutre
+- 55-75 = Greed → défavorable à l'or
+- 75-100 = Extreme Greed → très défavorable
 
-📰 Actualités récentes :
+📰 Actualités récentes sur le Gold/Dollar :
 ${collected.news.map((n,i) => `${i+1}. ${n}`).join('\n')}
 
 📅 Événements économiques du jour :
@@ -371,49 +384,39 @@ ${collected.events.map((e,i) => `${i+1}. ${e}`).join('\n')}
 🗓️ Saisonnalité : ${collected.seasonality}
 ⏰ Session actuelle : ${collected.session}
 
+INSTRUCTIONS IMPORTANTES :
+- Analyse chaque donnée séparément et en combinaison
+- Identifie les confluences haussières ou baissières
+- Donne des zones de prix RÉELLES basées sur le prix actuel
+- Sois précis et concret comme un analyste professionnel
+- Ne dis pas "données insuffisantes" — analyse ce que tu as
+
 Réponds UNIQUEMENT avec un JSON valide (sans markdown, sans backticks) :
 {
   "biais": "HAUSSIER" ou "BAISSIER" ou "NEUTRE",
   "force_signal": "FORT" ou "MODÉRÉ" ou "FAIBLE",
-  "resume": "résumé en 2-3 phrases claires de la situation",
-  "analyse_dxy": "impact du dollar sur l'or aujourd'hui",
-  "analyse_sentiment": "ce que dit le Fear&Greed sur le marché",
+  "resume": "résumé précis en 2-3 phrases de la situation actuelle",
+  "analyse_dxy": "impact précis du dollar sur l'or aujourd'hui",
+  "analyse_sentiment": "interprétation précise du Fear&Greed",
   "analyse_news": "impact des actualités sur l'or",
-  "evenements_importants": "événements économiques à surveiller",
-  "meilleur_moment": "quand trader aujourd'hui",
-  "zones_cles": "niveaux de prix importants à surveiller",
-  "risques": ["risque 1", "risque 2"],
-  "opportunites": ["opportunité 1", "opportunité 2"],
-  "conseil_final": "conseil concret pour trader aujourd'hui"
+  "evenements_importants": "événements à surveiller aujourd'hui et cette semaine",
+  "meilleur_moment": "moment précis pour trader avec justification",
+  "zones_cles": "supports et résistances précis basés sur le prix actuel",
+  "risques": ["risque concret 1", "risque concret 2"],
+  "opportunites": ["opportunité concrète 1", "opportunité concrète 2"],
+  "conseil_final": "conseil précis et actionnable pour trader aujourd'hui"
 }`;
 
-      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type':  'application/json',
-          'Authorization': `Bearer ${OPENROUTER_KEY}`,
-          'HTTP-Referer':  'https://tps-frontend-green.vercel.app',
-          'X-Title':       'TPS Market Analysis',
-        },
-        body: JSON.stringify({
-          model:       'deepseek/deepseek-v4-flash:free',
-          messages:    [{ role: 'user', content: prompt }],
-          max_tokens:  2000,
-          temperature: 0.3,
-        })
-      });
-
-      const data = await response.json();
-      if (data.error) throw new Error(data.error.message);
-      const text    = data.choices?.[0]?.message?.content;
-      if (!text) throw new Error('Réponse vide');
+      const text    = await callOpenRouter(prompt, 2000);
       const cleaned = text.replace(/```json|```/g, '').trim();
       const parsed  = JSON.parse(cleaned);
       setAnalysis(parsed);
+      setCurrentModel(null);
 
     } catch (err) {
       console.error('Erreur analyse:', err);
-      setError('Erreur : ' + err.message);
+      setError('Tous les modèles IA sont temporairement indisponibles. Réessaie dans quelques minutes.');
+      setCurrentModel(null);
     } finally {
       setLoading(false);
     }
@@ -433,7 +436,6 @@ Réponds UNIQUEMENT avec un JSON valide (sans markdown, sans backticks) :
 
   return (
     <div style={s.page}>
-
       <div style={s.header}>
         <div>
           <h1 style={s.title}>📊 Analyse Marché</h1>
@@ -441,10 +443,8 @@ Réponds UNIQUEMENT avec un JSON valide (sans markdown, sans backticks) :
         </div>
       </div>
 
-      {/* ── Calendrier économique ── */}
       <EconomicCalendar />
 
-      {/* Bouton analyser */}
       <div style={s.analyzeCard}>
         <div style={s.analyzeIcon}>📊</div>
         <div style={s.analyzeTitle}>Analyse Fondamentale XAUUSD</div>
@@ -469,14 +469,14 @@ Réponds UNIQUEMENT avec un JSON valide (sans markdown, sans backticks) :
           <div style={s.rawCard}>
             <div style={s.rawLabel}>🥇 XAUUSD</div>
             <div style={s.rawValue}>{rawData.xauusd.price}$</div>
-            <div style={{ ...s.rawChange, color: parseFloat(rawData.xauusd.change_percent) >= 0 ? '#00d4aa' : '#ef4444' }}>
+            <div style={{...s.rawChange, color: parseFloat(rawData.xauusd.change_percent) >= 0 ? '#00d4aa' : '#ef4444'}}>
               {parseFloat(rawData.xauusd.change_percent) >= 0 ? '▲' : '▼'} {rawData.xauusd.change_percent}%
             </div>
           </div>
           <div style={s.rawCard}>
             <div style={s.rawLabel}>💵 DXY</div>
             <div style={s.rawValue}>{rawData.dxy.price}</div>
-            <div style={{ ...s.rawChange, color: parseFloat(rawData.dxy.change_percent) >= 0 ? '#ef4444' : '#00d4aa' }}>
+            <div style={{...s.rawChange, color: parseFloat(rawData.dxy.change_percent) >= 0 ? '#ef4444' : '#00d4aa'}}>
               {parseFloat(rawData.dxy.change_percent) >= 0 ? '▲' : '▼'} {rawData.dxy.change_percent}%
             </div>
           </div>
@@ -502,19 +502,20 @@ Réponds UNIQUEMENT avec un JSON valide (sans markdown, sans backticks) :
               </div>
             ))}
           </div>
+          {currentModel && <div style={s.modelInfo}>{currentModel}</div>}
         </div>
       )}
 
       {analysis && (
         <div style={s.results}>
-          <div style={{...s.biaisCard, borderColor: biaisColor(analysis.biais) + '44'}}>
-            <div style={{...s.biaisIcon, color: biaisColor(analysis.biais), background: biaisColor(analysis.biais) + '22'}}>
+          <div style={{...s.biaisCard, borderColor: biaisColor(analysis.biais)+'44'}}>
+            <div style={{...s.biaisIcon, color: biaisColor(analysis.biais), background: biaisColor(analysis.biais)+'22'}}>
               {biaisIcon(analysis.biais)}
             </div>
             <div style={s.biaisInfo}>
               <div style={s.biaisLabel}>Biais du jour</div>
               <div style={{...s.biaisValue, color: biaisColor(analysis.biais)}}>{analysis.biais}</div>
-              <div style={{...s.forceTag, background: biaisColor(analysis.biais) + '22', color: biaisColor(analysis.biais)}}>
+              <div style={{...s.forceTag, background: biaisColor(analysis.biais)+'22', color: biaisColor(analysis.biais)}}>
                 Signal {analysis.force_signal}
               </div>
             </div>
@@ -605,6 +606,7 @@ const s = {
   loadingCard:    { background:'#111827', border:'1px solid #1f2937', borderRadius:'12px', padding:'24px', marginBottom:'16px' },
   loadingSteps:   { display:'flex', flexDirection:'column', gap:'8px' },
   loadingStep:    { display:'flex', alignItems:'center', gap:'10px', color:'#9ca3af', fontSize:'13px' },
+  modelInfo:      { color:'#6b7280', fontSize:'11px', marginTop:'8px', textAlign:'center', fontStyle:'italic' },
   results:        { display:'flex', flexDirection:'column', gap:'14px' },
   biaisCard:      { background:'#111827', border:'2px solid', borderRadius:'16px', padding:'20px', display:'flex', alignItems:'center', gap:'16px', flexWrap:'wrap' },
   biaisIcon:      { width:'60px', height:'60px', borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 },
