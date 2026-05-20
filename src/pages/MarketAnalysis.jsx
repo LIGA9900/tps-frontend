@@ -61,88 +61,62 @@ function EconomicCalendar() {
   const [selectedDay,  setSelectedDay]  = useState('today');
   const [filterImpact, setFilterImpact] = useState('all');
 
-  const fetchCalendar = async (day) => {
-    setLoadingCal(true);
-    setErrorCal(null);
-    setEvents([]);
+ const fetchCalendar = async (day) => {
+  setLoadingCal(true);
+  setErrorCal(null);
+  setEvents([]);
 
-    try {
-      const today = new Date();
+  try {
+    // API ForexFactory — gratuite, sans clé
+    const r = await fetch('https://nfs.faireconomy.media/ff_calendar_thisweek.json');
+    const d = await r.json();
+    console.log('ForexFactory response:', d);
 
-      // Format jj/mm/aaaa requis par l'API
-      const fmt = (d) => {
-        const dd   = String(d.getDate()).padStart(2, '0');
-        const mm   = String(d.getMonth() + 1).padStart(2, '0');
-        const yyyy = d.getFullYear();
-        return `${dd}/${mm}/${yyyy}`;
-      };
+    const today    = new Date();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(today.getDate() + 1);
+    const weekEnd  = new Date(today);
+    weekEnd.setDate(today.getDate() + 6);
 
-      let fromDate, toDate;
+    const toDateStr = (d) => d.toISOString().split('T')[0];
 
-      if (day === 'today') {
-        fromDate = toDate = fmt(today);
-      } else if (day === 'tomorrow') {
-        const tomorrow = new Date(today);
-        tomorrow.setDate(today.getDate() + 1);
-        fromDate = toDate = fmt(tomorrow);
-      } else {
-        const end = new Date(today);
-        end.setDate(today.getDate() + 6);
-        fromDate = fmt(today);
-        toDate   = fmt(end);
-      }
+    // Filtrer selon la sélection
+    const filtered = d.filter(e => {
+      const eventDate = new Date(e.date).toISOString().split('T')[0];
+      if (day === 'today')    return eventDate === toDateStr(today);
+      if (day === 'tomorrow') return eventDate === toDateStr(tomorrow);
+      return eventDate >= toDateStr(today) && eventDate <= toDateStr(weekEnd);
+    });
 
-      const url = new URL('https://trader-calendar-api.p.rapidapi.com/calendar');
-      url.searchParams.append('startDate', fromDate);
-      url.searchParams.append('endDate',   toDate);
+    // Mapper vers notre format
+    const formatted = filtered.map(e => ({
+      date:     new Date(e.date).toLocaleDateString('fr-FR'),
+      time:     e.date ? new Date(e.date).toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' }) : '--:--',
+      country:  e.country  || 'US',
+      event:    e.title    || '',
+      impact:   e.impact   || 'low',
+      prev:     e.previous || '',
+      estimate: e.forecast || '',
+      actual:   e.actual   || '',
+    })).filter(e => e.event !== '');
 
-      const r = await fetch(url.toString(), {
-        method: 'GET',
-        headers: {
-          'x-rapidapi-host': 'trader-calendar-api.p.rapidapi.com',
-          'x-rapidapi-key':  RAPIDAPI_KEY,
-        },
-      });
-
-      const d = await r.json();
-      console.log('RapidAPI response:', d);
-
-      // Adapter la réponse à notre format — couvre plusieurs structures possibles
-      const raw = Array.isArray(d) ? d : (d.data || d.events || d.calendar || d.result || []);
-
-      const formatted = raw
-        .map(e => ({
-          date:     e.date       || e.Date       || e.releaseDate || '',
-          time:     e.time       || e.Time       || e.hour        || e.releaseTime || '--:--',
-          country:  e.country    || e.Country    || e.currency    || e.zone        || 'US',
-          event:    e.event      || e.Event      || e.name        || e.title       || e.indicator || '',
-          impact:   ((e.impact   || e.Impact     || e.volatility  || e.importance  || 'low') + '').toLowerCase(),
-          prev:     e.previous   || e.prev       || e.Previous    || e.last        || '',
-          estimate: e.forecast   || e.estimate   || e.Forecast    || e.consensus   || '',
-          actual:   e.actual     || e.Actual     || e.value       || '',
-        }))
-        .filter(e => e.event !== '');
-
-      if (formatted.length === 0) {
-        setEvents([{
-          date:    fromDate,
-          time:    '--:--',
-          country: 'US',
-          event:   'Aucun événement économique pour cette période',
-          impact:  'low',
-          prev: '', estimate: '', actual: '',
-        }]);
-      } else {
-        setEvents(formatted);
-      }
-
-    } catch (err) {
-      console.error('Erreur calendrier:', err);
-      setErrorCal('Impossible de charger le calendrier. Vérifie ta clé RapidAPI dans Vercel.');
-    } finally {
-      setLoadingCal(false);
+    if (formatted.length === 0) {
+      setEvents([{
+        date: '', time: '--:--', country: 'US',
+        event: 'Aucun événement économique pour cette période',
+        impact: 'low', prev: '', estimate: '', actual: '',
+      }]);
+    } else {
+      setEvents(formatted);
     }
-  };
+
+  } catch (err) {
+    console.error('Erreur calendrier:', err);
+    setErrorCal('Impossible de charger le calendrier ForexFactory.');
+  } finally {
+    setLoadingCal(false);
+  }
+};
 
   useEffect(() => { fetchCalendar('today'); }, []);
 
