@@ -68,7 +68,7 @@ function EconomicCalendar() {
 
   try {
     // API ForexFactory — gratuite, sans clé
-    const r = await fetch('https://nfs.faireconomy.media/ff_calendar_thisweek.json');
+    const r = await fetch('https://corsproxy.io/?url=https://nfs.faireconomy.media/ff_calendar_thisweek.json');
     const d = await r.json();
     console.log('ForexFactory response:', d);
 
